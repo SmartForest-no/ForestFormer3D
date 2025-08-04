@@ -3719,7 +3719,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
         PlyData([el], text=True).write(filename)
 
     @staticmethod
-    def save_ply_withscore_right(points, semantic_pred, instance_pred, scores, filename, semantic_gt=None, instance_gt=None):
+    def save_ply_withscore(points, semantic_pred, instance_pred, scores, filename, semantic_gt=None, instance_gt=None):
         from plyfile import PlyData, PlyElement
         output_dir = os.path.dirname(filename)
         os.makedirs(output_dir, exist_ok=True)
@@ -3737,50 +3737,6 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
 
         el = PlyElement.describe(vertex, 'vertex')
         PlyData([el], text=True).write(filename)
-
-    @staticmethod
-    def save_ply_withscore(points, semantic_pred, instance_pred, scores, filename, semantic_gt=None, instance_gt=None):
-        from plyfile import PlyData, PlyElement
-        output_dir = os.path.dirname(filename)
-        os.makedirs(output_dir, exist_ok=True)
-
-        dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'), 
-                ('semantic_pred', 'i4'), ('instance_pred', 'i4'), ('score', 'f4')]
-
-        if semantic_gt is not None and instance_gt is not None:
-            dtype += [('semantic_gt', 'i4'), ('instance_gt', 'i4')]
-
-            # 保存原始文件（无修正）
-            vertex_orig = np.array([
-                tuple(points[i]) + (semantic_pred[i], instance_pred[i], scores[i], semantic_gt[i], instance_gt[i])
-                for i in range(points.shape[0])
-            ], dtype=dtype)
-            PlyData([PlyElement.describe(vertex_orig, 'vertex')], text=True).write(filename)
-
-            # 修正条件：保留满足以下规则的点
-            valid_mask = np.full(points.shape[0], True)
-            for i in range(points.shape[0]):
-                if semantic_pred[i] == 0 and instance_gt[i] != 0:
-                    valid_mask[i] = False
-                elif semantic_pred[i] in [1, 2] and instance_gt[i] == 0:
-                    valid_mask[i] = False
-
-            # 应用修正并保存 _modified 文件
-            vertex_modified = np.array([
-                tuple(points[i]) + (semantic_pred[i], instance_pred[i], scores[i], semantic_gt[i], instance_gt[i])
-                for i in range(points.shape[0]) if valid_mask[i]
-            ], dtype=dtype)
-            modified_filename = filename.replace(".ply", "_modified.ply")
-            PlyData([PlyElement.describe(vertex_modified, 'vertex')], text=True).write(modified_filename)
-
-        else:
-            # 没有gt的情况，只保存原始版本
-            vertex = np.array([
-                tuple(points[i]) + (semantic_pred[i], instance_pred[i], scores[i])
-                for i in range(points.shape[0])
-            ], dtype=dtype)
-            PlyData([PlyElement.describe(vertex, 'vertex')], text=True).write(filename)
-
 
     @staticmethod
     def save_bluepoints(points, semantic_pred, instance_pred, scores, filename, semantic_gt=None, instance_gt=None):
