@@ -1,20 +1,32 @@
 # ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds
 
-This is the official implementation of the **ICCV 2025** paper:
+This is the official implementation of the paper:
 
 **"ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds"**
 
-- 🌐 Project page: [https://bxiang233.github.io/FF3D/](https://bxiang233.github.io/FF3D/)
-- 📄 Paper: [https://www.arxiv.org/abs/2506.16991](https://www.arxiv.org/abs/2506.16991)
-- 📦 Dataset: *(link to be added)*
+(*Accepted as Oral at ICCV 2025 – see you in 🏝️ Honolulu!* 🎉)
+
+- 🌐 [Project page](https://bxiang233.github.io/FF3D/)
+- 📄 [Paper on arXiv](https://www.arxiv.org/abs/2506.16991)
+- 📦 [Dataset & pre-trained model on zenodo](https://zenodo.org/records/16742708)
 
 ---
 
 # ForestFormer3D environment setup
-
-
 This guide provides step-by-step instructions to build and configure the Docker environment for ForestFormer3D, set up debugging in Visual Studio Code, and resolve common issues.
 
+At first, please download the dataset and pretrained model from Zenodo, and unzip and place them in the correct locations. Make sure the directory structure looks like:
+
+```bash
+ForestFormer3D/
+├── data/
+│   └── ForAINetV2/
+│       ├── train_val_data/
+│       └── test_data/
+├── work_dirs/
+│   └── clean_forestformer/
+│       └── epoch_3000_fix.pth
+```
 ---
 
 ## Steps to build and configure the environment
@@ -144,7 +156,6 @@ CUDA_VISIBLE_DEVICES=0 python tools/test.py /workspace/configs/oneformer3d_qs_ra
 CUDA_VISIBLE_DEVICES=0 python tools/test.py /workspace/configs/oneformer3d_qs_radius16_qp300_2many.py /workspace/work_dirs/clean_forestformer/epoch_3000_fix.pth
 
 ```
-
 
 ---
 
@@ -398,5 +409,17 @@ if is_test:
 #if 'test' in lidar_path:
 ```
 
-
 This two-step (or multiple-step) inference improves robustness in challenging, highly dense forests.
+
+---
+## 🙋‍♀️ Questions & suggestions
+
+Welcome to ask questions via Issues! This helps more people see the discussion and avoid duplicated questions.
+
+🔍 Before opening a new issue, please check if someone has already asked the same question.  
+Thank you for your cooperation, and we’re looking forward to your suggestions and ideas! 🌟
+
+---
+## 💡Note on training GPU requirements
+
+The training was run on a single A100 GPU. If you're using a GPU with less memory, try reducing the cylinder radius in the config to prevent OOM.
