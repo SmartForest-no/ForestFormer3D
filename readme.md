@@ -423,3 +423,10 @@ Thank you for your cooperation, and we’re looking forward to your suggestions 
 ## 💡Note on training GPU requirements
 
 The training was run on a single A100 GPU. If you're using a GPU with less memory, try reducing the cylinder radius in the config to prevent OOM.
+
+---
+## 📝 License
+This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3).
+You may use, modify, and distribute this software under the terms of the license.
+
+👉 See the [LICENSE](./LICENSE) file for full details.
