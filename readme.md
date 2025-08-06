@@ -426,7 +426,8 @@ The training was run on a single A100 GPU. If you're using a GPU with less memor
 
 ---
 ## 📝 License
-This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3).
-You may use, modify, and distribute this software under the terms of the license.
+ForestFormer3D is based on the OneFormer3D codebase by Danila Rukhovich (https://github.com/filaPro/oneformer3d),  
+which is licensed under the Creative Commons Attribution-NonCommercial 4.0 International License (CC BY-NC 4.0).
 
-👉 See the [LICENSE](./LICENSE) file for full details.
+This repository is therefore also released under the same license.  
+Please cite appropriately if you use or modify this code. Thank you.
