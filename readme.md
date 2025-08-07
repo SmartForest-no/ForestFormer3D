@@ -424,6 +424,14 @@ Thank you for your cooperation, and we’re looking forward to your suggestions 
 
 The training was run on a single A100 GPU. If you're using a GPU with less memory, try reducing the cylinder radius in the config to prevent OOM.
 
+For inference, batch_size is not used, because each cylinder is processed sequentially. If you encounter CUDA OOM issues during inference, try:
+
+1. Lowering the chunk value in the config
+
+2. Reducing `num_points` in the code ([see this line](https://github.com/SmartForest-no/ForestFormer3D/blob/8ca0f45196ce0cc8a656d046b3f935cbf34f315b/oneformer3d/oneformer3d.py#L2273))
+
+3. Reducing the cylinder radius, which is also configurable in the config file.
+
 ---
 ## 📝 License
 ForestFormer3D is based on the OneFormer3D codebase by Danila Rukhovich (https://github.com/filaPro/oneformer3d),  
