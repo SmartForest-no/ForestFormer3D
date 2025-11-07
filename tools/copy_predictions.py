@@ -2,10 +2,10 @@ import os
 import shutil
 from pathlib import Path
 
-src_main = Path("/workspace/work_dirs/bluepoint_th04fixed_03_priority_test")
-src_delete = Path("/workspace/work_dirs/bluepoint_th04fixed_03_priority_test_tobedelete")
+src_main = Path("work_dirs/bluepoint_th04fixed_03_priority_test")
+src_delete = Path("work_dirs/bluepoint_th04fixed_03_priority_test_tobedelete")
 
-dst_root = Path("/workspace/work_dirs/bluepoint_th04fixed_03_priority_test_merged")
+dst_root = Path("work_dirs/bluepoint_th04fixed_03_priority_test_merged")
 
 round_dirs = [
     "round_1",
