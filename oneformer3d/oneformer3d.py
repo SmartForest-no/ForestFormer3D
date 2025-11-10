@@ -2291,7 +2291,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             
             ##########output_path = "work_dirs/bluepoint_th04fixed_03_priority_test_tobedelete"
             #########output_path = "work_dirs/bluepoint_forinstancev2"
-            output_path = "work_dirs/V3"
+            output_path = self.test_cfg.get('output_dir', 'work_dirs/default_output')
             score_th1 = self.score_th
             score_th2 = 0.3
             t2 = time.time()   
