@@ -85,7 +85,7 @@ class UnifiedSegMetric(SegMetric):
         all_mean_weighted_cov_global = [[] for _ in range(NUM_CLASSES_BINARY)]
 
         for eval_ann, single_pred_results in results:
-            Get GT and Pred labels, and shift them by 1 (0 is ignored)
+            # Get GT and Pred labels, and shift them by 1 (0 is ignored)
             sem_gt_i = eval_ann['pts_semantic_mask'] + 1
             sem_pre_i = single_pred_results['pts_semantic_mask'][1] + 1
             ins_gt_i = eval_ann['pts_instance_mask']
@@ -236,13 +236,6 @@ class UnifiedSegMetric(SegMetric):
         log_str += f"mMUCov: {metrics['mMUCov']:.4f}, mMWCov: {metrics['mMWCov']:.4f}"
         logger.info(log_str)
 
-        metrics = dict()
-        metrics['mIoU'] = ret_sem['mIoU']
-        metrics['mPQ'] = ret_pan['PQ']
-        metrics['mSQ'] = ret_pan['SQ']
-        metrics['mRQ'] = ret_pan['RQ']
-        metrics['mPrecision'] = ret_inst['all_prec_50%']
-        metrics['mRecall'] = ret_inst['all_rec_50%']
         return metrics
 
     def map_inst_markup(self,
