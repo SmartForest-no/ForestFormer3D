@@ -43,7 +43,7 @@ sudo docker build -t forestformer3d-image .
 # Run the Docker container with GPU support, shared memory allocation, and port mapping
 sudo docker run --gpus all --shm-size=128g -d -p 127.0.0.1:49211:22 \
   -v #locationofproject#:/workspace \
-  -v /workspace/segmentator:/workspace/segmentator \
+  -v segmentator:segmentator \
   --name forestformer3d-container forestformer3d-image
 
 # Enter the running container
@@ -89,9 +89,9 @@ pip install torch-cluster --no-cache-dir --no-deps
 pip show mmengine
 
 # Replace the following files with updated versions:
-cp /workspace/replace_mmdetection_files/loops.py /opt/conda/lib/python3.10/site-packages/mmengine/runner/
-cp /workspace/replace_mmdetection_files/base_model.py /opt/conda/lib/python3.10/site-packages/mmengine/model/base_model/
-cp /workspace/replace_mmdetection_files/transforms_3d.py /opt/conda/lib/python3.10/site-packages/mmdet3d/datasets/transforms/
+cp replace_mmdetection_files/loops.py /opt/conda/lib/python3.10/site-packages/mmengine/runner/
+cp replace_mmdetection_files/base_model.py /opt/conda/lib/python3.10/site-packages/mmengine/model/base_model/
+cp replace_mmdetection_files/transforms_3d.py /opt/conda/lib/python3.10/site-packages/mmdet3d/datasets/transforms/
 ```
 
 ### **5. Run the program**
@@ -100,9 +100,9 @@ cp /workspace/replace_mmdetection_files/transforms_3d.py /opt/conda/lib/python3.
 
 Ensure the following three folders are set up in your workspace:
 
-- `/workspace/data/ForAINetV2/meta_data`
-- `/workspace/data/ForAINetV2/test_data`
-- `/workspace/data/ForAINetV2/train_val_data`
+- `data/ForAINetV2/meta_data`
+- `data/ForAINetV2/test_data`
+- `data/ForAINetV2/train_val_data`
 
 - Place all `.ply` files for training and validation in the `train_val_data` folder.
 - Place all `.ply` files for testing in the `test_data` folder.
@@ -111,14 +111,14 @@ Ensure the following three folders are set up in your workspace:
 
 ```bash
 # Step 1: Navigate to the data folder
-cd /workspace/data/ForAINetV2
+cd data/ForAINetV2
 
 pip install laspy
 pip install "laspy[lazrs]"
 
 # Step 2: Run the data loader script
 python batch_load_ForAINetV2_data.py
-# After this you will have folder /workspace/data/ForAINetV2/forainetv2_instance_data
+# After this you will have folder data/ForAINetV2/forainetv2_instance_data
 
 # Step 3: Navigate back to the main directory
 cd ../..
@@ -131,8 +131,8 @@ python tools/create_data_forainetv2.py forainetv2
 ```bash
 export PYTHONPATH=/workspace
 # Run the training script with the specified configuration and work directory
-CUDA_VISIBLE_DEVICES=0 python tools/train.py /workspace/configs/oneformer3d_qs_radius16_qp300_2many.py \
-  --work-dir /workspace/work_dirs/<output_folder_name>
+CUDA_VISIBLE_DEVICES=0 python tools/train.py configs/oneformer3d_qs_radius16_qp300_2many.py \
+  --work-dir work_dirs/<output_folder_name>
 ```
 
 #### **Run testing**
@@ -143,17 +143,17 @@ python tools/fix_spconv_checkpoint.py \
   --in-path work_dirs/oneformer3d_1xb4_forainetv2/trained.pth \
   --out-path work_dirs/oneformer3d_1xb4_forainetv2/trained_fix.pth
 
-#2. Modify the output_path in function "predict" in class ForAINetV2OneFormer3D_XAwarequery in file /workspace/oneformer3d/oneformer3d.py
+#2. Modify the output_path in function "predict" in class ForAINetV2OneFormer3D_XAwarequery in file oneformer3d/oneformer3d.py
 
 #3. Run the test script:
-CUDA_VISIBLE_DEVICES=0 python tools/test.py /workspace/configs/oneformer3d_qs_radius16_qp300_2many.py \
+CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py \
   work_dirs/oneformer3d_1xb4_forainetv2/trained_fix.pth
 
 ```
 ##### Load pre-trained model
 ```bash
 # If you want to use the official pre-trained model, run:
-CUDA_VISIBLE_DEVICES=0 python tools/test.py /workspace/configs/oneformer3d_qs_radius16_qp300_2many.py /workspace/work_dirs/clean_forestformer/epoch_3000_fix.pth
+CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py work_dirs/clean_forestformer/epoch_3000_fix.pth
 
 ```
 
@@ -168,7 +168,7 @@ To evaluate your own test files, follow these steps:
 Place your test files under the following directory:
 
 ```
-/workspace/data/ForAINetV2/test_data
+data/ForAINetV2/test_data
 ```
 
 ### 2. Update the test list
@@ -176,7 +176,7 @@ Place your test files under the following directory:
 Edit the following file:
 
 ```
-/workspace/data/ForAINetV2/meta_data/test_list.txt
+data/ForAINetV2/meta_data/test_list.txt
 ```
 
 Append the base names (without extension) of your test files. For example:
@@ -190,7 +190,7 @@ your_custom_test_file_name  # <-- add your file name here
 
 ```bash
 # Step 1: Navigate to the data folder
-cd /workspace/data/ForAINetV2
+cd data/ForAINetV2
 
 # Step 2: Install required libraries (if not already installed)
 pip install laspy
@@ -198,7 +198,7 @@ pip install "laspy[lazrs]"
 
 # Step 3: Run the data loader script
 python batch_load_ForAINetV2_data.py
-# This will regenerate /workspace/data/ForAINetV2/forainetv2_instance_data
+# This will regenerate data/ForAINetV2/forainetv2_instance_data
 
 # Step 4: Navigate back to the main directory
 cd ../..
@@ -212,7 +212,7 @@ python tools/create_data_forainetv2.py forainetv2
 Once preprocessing is complete, you can run:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python tools/test.py /workspace/configs/oneformer3d_qs_radius16_qp300_2many.py /workspace/work_dirs/clean_forestformer/epoch_3000_fix.pth
+CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py work_dirs/clean_forestformer/epoch_3000_fix.pth
 ```
 
 
@@ -226,7 +226,7 @@ If your test files are **not in `.ply` format**, you need to modify the data loa
 
 File path:
 ```
-/workspace/data/ForAINetV2/batch_load_ForAINetV2_data.py
+data/ForAINetV2/batch_load_ForAINetV2_data.py
 ```
 
 Find the function `export_one_scan()` and modify:
@@ -247,7 +247,7 @@ pc_file = osp.join(forainetv2_dir, scan_name + '.laz')  # or other formats
 
 File path:
 ```
-/workspace/data/ForAINetV2/load_forainetv2_data.py
+data/ForAINetV2/load_forainetv2_data.py
 ```
 
 Find the function `export()` and modify:
@@ -346,7 +346,7 @@ In extremely dense test plots, the initial inference run may miss some trees. To
 You can perform this secondary inference by running:
 
 ```bash
-bash /workspace/tools/inference_bluepoint.sh
+bash tools/inference_bluepoint.sh
 ```
 
 This script re-runs inference on remaining "blue points" after the first round.
@@ -357,7 +357,7 @@ This script re-runs inference on remaining "blue points" after the first round.
 2. Instead of running `tools/test.py`, execute:
 
 ```bash
-bash /workspace/tools/inference_bluepoint.sh
+bash tools/inference_bluepoint.sh
 ```
 
 3. Make the following adjustments before running:
@@ -365,7 +365,7 @@ bash /workspace/tools/inference_bluepoint.sh
 - Put all your test file names in:
 
 ```
-/workspace/data/ForAINetV2/meta_data/test_list_initial.txt
+data/ForAINetV2/meta_data/test_list_initial.txt
 ```
 
 instead of the default `test_list.txt`.
@@ -378,7 +378,7 @@ BLUEPOINTS_DIR="$WORK_DIR/work_dirs/YOUROUTPUTPATH"
 
 - In the file:
 ```
-/workspace/oneformer3d/oneformer3d.py
+oneformer3d/oneformer3d.py
 ```
 Inside the function `predict` of class `ForAINetV2OneFormer3D_XAwarequery`, change:
 

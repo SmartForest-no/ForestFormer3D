@@ -11,7 +11,7 @@
 set -euo pipefail
 FIXTAG="fixedname"          # change the tag if you like
 
-ROOT="/workspace/data/ForAINetV2"
+ROOT="data/ForAINetV2"
 LIST="${ROOT}/meta_data/test_list_initial.txt"
 LIST_BAK="${ROOT}/meta_data/test_list_initial_original.txt"
 DATA="${ROOT}/test_data"

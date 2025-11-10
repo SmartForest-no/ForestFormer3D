@@ -46,8 +46,8 @@ RUN git clone https://github.com/rusty1s/pytorch_scatter.git \
     && TORCH_CUDA_ARCH_LIST="6.1;7.0;8.0" FORCE_CUDA=1 pip install .
 
 # 单独安装 ScanNet superpoint segmentator
-RUN git clone https://github.com/Karbo123/segmentator.git /workspace/segmentator \
-    && cd /workspace/segmentator/csrc \
+RUN git clone https://github.com/Karbo123/segmentator.git segmentator \
+    && cd segmentator/csrc \
     && git reset --hard 76efe46d03dd27afa78df972b17d07f2c6cfb696 \
     && mkdir build \
     && cd build \
