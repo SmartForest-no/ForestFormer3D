@@ -235,36 +235,8 @@ class UnifiedSegMetric(SegMetric):
         log_str += f"mPrecision: {metrics['mPrecision']:.4f}, mRecall: {metrics['mRecall']:.4f}, F1: {metrics['F1']:.4f}\n"
         log_str += f"mMUCov: {metrics['mMUCov']:.4f}, mMWCov: {metrics['mMWCov']:.4f}"
         logger.info(log_str)
-
+        
         return metrics
-
-    def map_inst_markup(self,
-                        pts_semantic_mask,
-                        pts_instance_mask,
-                        valid_class_ids,
-                        num_stuff_cls):
-        """Map gt instance and semantic classes back from panoptic annotations.
-
-        Args:
-            pts_semantic_mask (np.array): of shape (n_raw_points,)
-            pts_instance_mask (np.array): of shape (n_raw_points.)
-            valid_class_ids (Tuple): of len n_instance_classes
-            num_stuff_cls (int): number of stuff classes
-        
-        Returns:
-            Tuple:
-                np.array: pts_semantic_mask of shape (n_raw_points,)
-                np.array: pts_instance_mask of shape (n_raw_points,)
-        """
-        pts_instance_mask -= num_stuff_cls
-        pts_instance_mask[pts_instance_mask < 0] = -1
-        pts_semantic_mask -= num_stuff_cls
-        pts_semantic_mask[pts_instance_mask == -1] = -1
-
-        mapping = np.array(list(valid_class_ids) + [-1])
-        pts_semantic_mask = mapping[pts_semantic_mask]
-        
-        return pts_semantic_mask, pts_instance_mask
 
 
 @METRICS.register_module()
