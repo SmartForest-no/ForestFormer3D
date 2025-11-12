@@ -2419,8 +2419,22 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                         scores_kept = torch.as_tensor(scores, device=pc3.device)[keep]   # (K,)
 
                         # ② voxel → pc1   (K, N_pc1)  → COO
-                        mk_bool = masks_kept[:, nn_idx_pc1]             # bool
-                        rows, cols = mk_bool.nonzero(as_tuple=True)     
+                        rows_list = []
+                        cols_list = []
+                        max_chunk = (torch.iinfo(torch.int32).max // masks_kept.shape[0]) - 1_000_000
+                        max_chunk = max(1, max_chunk)
+                        chunk_size = min(nn_idx_pc1.shape[0], max_chunk)
+
+                        for start in range(0, nn_idx_pc1.shape[0], chunk_size):
+                            end = min(start + chunk_size, nn_idx_pc1.shape[0])
+                            mk_bool_chunk = masks_kept[:, nn_idx_pc1[start:end]]
+                            rows_chunk, cols_chunk = mk_bool_chunk.nonzero(as_tuple=True)
+                            cols_chunk = cols_chunk + start
+                            rows_list.append(rows_chunk)
+                            cols_list.append(cols_chunk)
+
+                        rows = torch.cat(rows_list, dim=0)
+                        cols = torch.cat(cols_list, dim=0)     
                         score_per_hit = scores_kept[rows]               # (nnz,)
 
                         N1 = pc1.shape[0]
