@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-
+from scipy import stats
 from mmengine.logging import MMLogger
 
 from mmdet3d.evaluation import InstanceSegMetric
@@ -64,223 +64,179 @@ class UnifiedSegMetric(SegMetric):
         """
         logger: MMLogger = MMLogger.get_current_instance()
 
-        self.valid_class_ids = self.dataset_meta['seg_valid_class_ids']
-        label2cat = self.metric_meta['label2cat']
-        ignore_index = self.metric_meta['ignore_index']
-        classes = self.metric_meta['classes']
-        thing_classes = [classes[i] for i in self.thing_class_inds]
-        stuff_classes = [classes[i] for i in self.stuff_class_inds]
-        num_stuff_cls = len(stuff_classes)
+        # These are specific to ForAINetV2 evaluation script
+        NUM_CLASSES_BINARY = 3  # unclassified, non-tree, tree
+        NUM_CLASSES_SEM = 4 # 0:unclassified, 1:ground, 2:wood, 3:leaf
+        INS_CLASS_IDS = [2]  # Instance class is 'wood'/'leaf' which maps to binary 'tree' (2)
+        STUFF_CLASS_IDS = [1] # Stuff class is 'ground' which maps to binary 'non-tree' (1)
 
-        gt_semantic_masks_inst_task = []
-        gt_instance_masks_inst_task = []
-        pred_instance_masks_inst_task = []
-        pred_instance_labels = []
-        pred_instance_scores = []
-
-        gt_semantic_masks_sem_task = []
-        pred_semantic_masks_sem_task = []
-
-        gt_masks_pan = []
-        pred_masks_pan = []
+        # Global accumulators
+        true_positive_classes_global = np.zeros(NUM_CLASSES_SEM)
+        positive_classes_global = np.zeros(NUM_CLASSES_SEM)
+        gt_classes_global = np.zeros(NUM_CLASSES_SEM)
+        true_positive_classes_bi_global = np.zeros(NUM_CLASSES_BINARY)
+        positive_classes_bi_global = np.zeros(NUM_CLASSES_BINARY)
+        gt_classes_bi_global = np.zeros(NUM_CLASSES_BINARY)
+        total_gt_ins_global = np.zeros(NUM_CLASSES_BINARY)
+        tpsins_global = [[] for _ in range(NUM_CLASSES_BINARY)]
+        fpsins_global = [[] for _ in range(NUM_CLASSES_BINARY)]
+        IoU_Tp_global = np.zeros(NUM_CLASSES_BINARY)
+        all_mean_cov_global = [[] for _ in range(NUM_CLASSES_BINARY)]
+        all_mean_weighted_cov_global = [[] for _ in range(NUM_CLASSES_BINARY)]
 
         for eval_ann, single_pred_results in results:
+            # Get GT and Pred labels, and shift them by 1 (0 is ignored)
+            sem_gt_i = eval_ann['pts_semantic_mask'] + 1
+            sem_pre_i = single_pred_results['pts_semantic_mask'][1] + 1
+            ins_gt_i = eval_ann['pts_instance_mask']
+            ins_pre_i = single_pred_results['pts_instance_mask'][1]
 
-            if 'originids' in single_pred_results:
-                eval_ann['pts_semantic_mask'] = eval_ann['pts_semantic_mask'][single_pred_results['originids']]
-                eval_ann['pts_instance_mask'] = eval_ann['pts_instance_mask'][single_pred_results['originids']]
-            
-            if self.metric_meta['dataset_name'] == 'S3DIS':
-                pan_gt = {}
-                pan_gt['pts_semantic_mask'] = eval_ann['pts_semantic_mask']
-                pan_gt['pts_instance_mask'] = \
-                                    eval_ann['pts_instance_mask'].copy()
+            # Semantic Segmentation Evaluation
+            for j in range(sem_gt_i.shape[0]):
+                gt_l, pred_l = int(sem_gt_i[j]), int(sem_pre_i[j])
+                gt_classes_global[gt_l] += 1
+                positive_classes_global[pred_l] += 1
+                true_positive_classes_global[gt_l] += int(gt_l == pred_l)
 
-                for stuff_cls in self.stuff_class_inds:
-                    pan_gt['pts_instance_mask'][\
-                        pan_gt['pts_semantic_mask'] == stuff_cls] = \
-                                    np.max(pan_gt['pts_instance_mask']) + 1
+            # Binary Semantic and Instance Evaluation
+            # Map semantic labels to binary: 1 for stuff (ground), 2 for thing (wood, leaf)
+            sem_gt_bi = np.copy(sem_gt_i)
+            sem_pre_bi = np.copy(sem_pre_i)
+            for sc in self.stuff_class_inds: sem_gt_bi[sem_gt_i == sc + 1] = 1
+            for sc in self.stuff_class_inds: sem_pre_bi[sem_pre_i == sc + 1] = 1
+            for tc in self.thing_class_inds: sem_gt_bi[sem_gt_i == tc + 1] = 2
+            for tc in self.thing_class_inds: sem_pre_bi[sem_pre_i == tc + 1] = 2
 
-                pan_gt['pts_instance_mask'] = np.unique(
-                                                pan_gt['pts_instance_mask'],
-                                                return_inverse=True)[1]
-                gt_masks_pan.append(pan_gt)
-            elif self.metric_meta['dataset_name'] == 'ForAINetV2':
-                pan_gt = {}
-                pan_gt['pts_semantic_mask'] = eval_ann['pts_semantic_mask'].copy()
-                pan_gt['pts_instance_mask'] = \
-                                    eval_ann['pts_instance_mask'].copy()
-                thing_min_value = min(self.thing_class_inds)
-                for stuff_cls in self.stuff_class_inds:
-                    pan_gt['pts_instance_mask'][\
-                        pan_gt['pts_semantic_mask'] == stuff_cls] = \
-                                    np.max(pan_gt['pts_instance_mask']) + 1
+            for j in range(sem_gt_bi.shape[0]):
+                gt_l, pred_l = int(sem_gt_bi[j]), int(sem_pre_bi[j])
+                gt_classes_bi_global[gt_l] += 1
+                positive_classes_bi_global[pred_l] += 1
+                true_positive_classes_bi_global[gt_l] += int(gt_l == pred_l)
 
-                pan_gt['pts_instance_mask'] = np.unique(
-                                                pan_gt['pts_instance_mask'],
-                                                return_inverse=True)[1]
-                for thing_cls in self.thing_class_inds:
-                    pan_gt['pts_semantic_mask'][pan_gt['pts_semantic_mask'] == thing_cls] = thing_min_value
+            # Filter out points that are ground in both pred and gt for instance evaluation
+            idxc = (sem_gt_bi != 1) | (sem_pre_bi != 1)
+            pred_ins, gt_ins = ins_pre_i[idxc], ins_gt_i[idxc]
+            pred_sem, gt_sem = sem_pre_bi[idxc], sem_gt_bi[idxc]
 
-                gt_masks_pan.append(pan_gt)
-            else:
-                gt_masks_pan.append(eval_ann)
-            
-            pred_masks_pan.append({
-                'pts_instance_mask': \
-                    single_pred_results['pts_instance_mask'][1],
-                'pts_semantic_mask': \
-                    single_pred_results['pts_semantic_mask'][1]
-            })
+            # Get predicted instances
+            un = np.unique(pred_ins)
+            pts_in_pred = [[] for _ in range(NUM_CLASSES_BINARY)]
+            for g in un:
+                if g == -1: continue
+                tmp = (pred_ins == g)
+                sem_seg_i = int(stats.mode(pred_sem[tmp], keepdims=True)[0][0])
+                pts_in_pred[sem_seg_i].append(tmp)
 
-            gt_semantic_masks_sem_task.append(eval_ann['pts_semantic_mask'])            
-            pred_semantic_masks_sem_task.append(
-                single_pred_results['pts_semantic_mask'][0])
+            # Get ground truth instances
+            un = np.unique(gt_ins)
+            pts_in_gt = [[] for _ in range(NUM_CLASSES_BINARY)]
+            for g in un:
+                if g == 0: continue # In ForAINetV2, instance ID 0 is not a valid instance
+                tmp = (gt_ins == g)
+                sem_seg_i = int(stats.mode(gt_sem[tmp], keepdims=True)[0][0])
+                pts_in_gt[sem_seg_i].append(tmp)
 
-            if self.metric_meta['dataset_name'] == 'S3DIS':
-                gt_semantic_masks_inst_task.append(eval_ann['pts_semantic_mask'])
-                gt_instance_masks_inst_task.append(eval_ann['pts_instance_mask'])  
-            elif self.metric_meta['dataset_name'] == 'ForAINetV2':
-                pan_gt = {}
-                pan_gt['pts_semantic_mask'] = eval_ann['pts_semantic_mask'].copy()
-                pan_gt['pts_instance_mask'] = \
-                                    eval_ann['pts_instance_mask'].copy()
-                thing_min_value = min(self.thing_class_inds)
-                for stuff_cls in self.stuff_class_inds:
-                    pan_gt['pts_instance_mask'][\
-                        pan_gt['pts_semantic_mask'] == stuff_cls] = \
-                                    np.max(pan_gt['pts_instance_mask']) + 1
+            # Coverage Metrics (MUCov, MWCov)
+            for i_sem in INS_CLASS_IDS:
+                if not pts_in_gt[i_sem] or not pts_in_pred[i_sem]: continue
+                sum_cov, num_gt_point, mean_weighted_cov = 0, 0, 0
+                for ins_gt in pts_in_gt[i_sem]:
+                    ovmax = 0.
+                    num_ins_gt_point = np.sum(ins_gt)
+                    num_gt_point += num_ins_gt_point
+                    for ins_pred in pts_in_pred[i_sem]:
+                        union = (ins_pred | ins_gt)
+                        intersect = (ins_pred & ins_gt)
+                        iou = float(np.sum(intersect)) / np.sum(union)
+                        if iou > ovmax: ovmax = iou
+                    sum_cov += ovmax
+                    mean_weighted_cov += ovmax * num_ins_gt_point
+                if len(pts_in_gt[i_sem]) != 0:
+                    all_mean_cov_global[i_sem].append(sum_cov / len(pts_in_gt[i_sem]))
+                    all_mean_weighted_cov_global[i_sem].append(mean_weighted_cov / num_gt_point)
 
-                pan_gt['pts_instance_mask'] = np.unique(
-                                                pan_gt['pts_instance_mask'],
-                                                return_inverse=True)[1]
-                for thing_cls in self.thing_class_inds:
-                    pan_gt['pts_semantic_mask'][pan_gt['pts_semantic_mask'] == thing_cls] = thing_min_value
+            # PQ, SQ, RQ Metrics
+            for i_sem in INS_CLASS_IDS:
+                tp, fp = [0.] * len(pts_in_pred[i_sem]), [0.] * len(pts_in_pred[i_sem])
+                IoU_Tp_per = 0
+                if pts_in_gt[i_sem]: total_gt_ins_global[i_sem] += len(pts_in_gt[i_sem])
 
-                gt_semantic_masks_inst_task.append(pan_gt['pts_semantic_mask'])
-                gt_instance_masks_inst_task.append(pan_gt['pts_instance_mask'])  
-            else:
-                sem_mask, inst_mask = self.map_inst_markup(
-                    eval_ann['pts_semantic_mask'].copy(), 
-                    eval_ann['pts_instance_mask'].copy(), 
-                    self.valid_class_ids[num_stuff_cls:],
-                    num_stuff_cls)
-                gt_semantic_masks_inst_task.append(sem_mask)
-                gt_instance_masks_inst_task.append(inst_mask)           
-            
-            pred_instance_masks_inst_task.append(
-                torch.tensor(single_pred_results['pts_instance_mask'][0]))
-            pred_instance_labels.append(
-                torch.tensor(single_pred_results['instance_labels']))
-            pred_instance_scores.append(
-                torch.tensor(single_pred_results['instance_scores']))
+                for ip, ins_pred in enumerate(pts_in_pred[i_sem]):
+                    ovmax = -1.
+                    if not pts_in_gt[i_sem]:
+                        fp[ip] = 1; continue
+                    for ig, ins_gt in enumerate(pts_in_gt[i_sem]):
+                        union = (ins_pred | ins_gt)
+                        intersect = (ins_pred & ins_gt)
+                        iou = float(np.sum(intersect)) / np.sum(union)
+                        if iou > ovmax: ovmax = iou
+                    if ovmax >= 0.5:
+                        tp[ip] = 1
+                        IoU_Tp_per += ovmax
+                    else:
+                        fp[ip] = 1
+                tpsins_global[i_sem].extend(tp)
+                fpsins_global[i_sem].extend(fp)
+                IoU_Tp_global[i_sem] += IoU_Tp_per
 
-        if self.metric_meta['dataset_name'] == 'ForAINetV2':
-            pan_class = ['nontree','tree']
-            pan_stuff_class_inds=[0] 
-            pan_thing_class_inds=[1]
-            pan_thing_classes = [pan_class[i] for i in pan_thing_class_inds]
-            pan_stuff_classes = [pan_class[i] for i in pan_stuff_class_inds]
-            pan_label2cat = {i: name for i, name in enumerate(pan_class)}
-            ret_pan = panoptic_seg_eval(
-                gt_masks_pan, pred_masks_pan, pan_class, pan_thing_classes,
-                pan_stuff_classes, self.min_num_points, self.id_offset,
-                pan_label2cat, ignore_index, logger)
-        else:
-            ret_pan = panoptic_seg_eval(
-            gt_masks_pan, pred_masks_pan, classes, thing_classes,
-            stuff_classes, self.min_num_points, self.id_offset,
-            label2cat, ignore_index, logger)
-
-        #ret_sem = seg_eval(
-        #    gt_semantic_masks_sem_task,
-        #    pred_semantic_masks_sem_task,
-        #   label2cat,
-        #    ignore_index[0],
-        #    logger=logger)
-        max_value = max(max(self.thing_class_inds), max(self.stuff_class_inds))+1
-        if not ignore_index:
-            ret_sem = seg_eval(
-                gt_semantic_masks_sem_task,
-                pred_semantic_masks_sem_task,
-                label2cat,
-                max_value,
-                logger=logger)
-        else:
-            ret_sem = seg_eval(
-                gt_semantic_masks_sem_task,
-                pred_semantic_masks_sem_task,
-                label2cat,
-                ignore_index[0],
-                logger=logger)
-
-        if self.metric_meta['dataset_name'] == 'S3DIS':
-            # :-1 for unlabeled
-            ret_inst = instance_seg_eval(
-                gt_semantic_masks_inst_task,
-                gt_instance_masks_inst_task,
-                pred_instance_masks_inst_task,
-                pred_instance_labels,
-                pred_instance_scores,
-                valid_class_ids=self.valid_class_ids,
-                class_labels=classes[:-1],
-                logger=logger)
-        elif self.metric_meta['dataset_name'] == 'ForAINetV2':
-            # :-1 for unlabeled
-            ret_inst = instance_seg_eval(
-                gt_semantic_masks_inst_task,
-                gt_instance_masks_inst_task,
-                pred_instance_masks_inst_task,
-                pred_instance_labels,
-                pred_instance_scores,
-                valid_class_ids=self.valid_class_ids[num_stuff_cls:-1], #self.valid_class_ids[num_stuff_cls:],
-                class_labels=['tree'], #classes[num_stuff_cls:],
-                logger=logger)
-        else:
-            # :-1 for unlabeled
-            ret_inst = instance_seg_eval(
-                gt_semantic_masks_inst_task,
-                gt_instance_masks_inst_task,
-                pred_instance_masks_inst_task,
-                pred_instance_labels,
-                pred_instance_scores,
-                valid_class_ids=self.valid_class_ids[num_stuff_cls:],
-                class_labels=classes[num_stuff_cls:-1],
-                logger=logger)
-
+        # Final Metric Calculation
         metrics = dict()
-        for ret, keys in zip((ret_sem, ret_inst, ret_pan), self.logger_keys):
-            for key in keys:
-                metrics[key] = ret[key]
+
+        # Semantic Segmentation
+        iou_list = []
+        valid_sem_classes = [i for i, n in enumerate(gt_classes_global) if n > 0 and i > 0] # Exclude unclassified
+        for i in range(1, NUM_CLASSES_SEM):
+            iou = true_positive_classes_global[i] / float(gt_classes_global[i] + positive_classes_global[i] - true_positive_classes_global[i] + 1e-8)
+            iou_list.append(iou)
+        metrics['mIoU'] = np.mean([iou_list[i-1] for i in valid_sem_classes]) if valid_sem_classes else 0.0
+
+        # Binary Semantic Segmentation
+        iou_list_bi = []
+        valid_bi_sem_classes = [i for i, n in enumerate(gt_classes_bi_global) if n > 0 and i > 0]
+        for i in range(1, NUM_CLASSES_BINARY):
+            iou = true_positive_classes_bi_global[i] / float(gt_classes_bi_global[i] + positive_classes_bi_global[i] - true_positive_classes_bi_global[i] + 1e-8)
+            iou_list_bi.append(iou)
+        metrics['mIoU_binary'] = np.mean([iou_list_bi[i-1] for i in valid_bi_sem_classes]) if valid_bi_sem_classes else 0.0
+
+        # Instance Segmentation
+        MUCov = np.zeros(NUM_CLASSES_BINARY)
+        MWCov = np.zeros(NUM_CLASSES_BINARY)
+        precision = np.zeros(NUM_CLASSES_BINARY)
+        recall = np.zeros(NUM_CLASSES_BINARY)
+        RQ = np.zeros(NUM_CLASSES_BINARY)
+        SQ = np.zeros(NUM_CLASSES_BINARY)
+        PQ = np.zeros(NUM_CLASSES_BINARY)
+        for i_sem in INS_CLASS_IDS:
+            MUCov[i_sem] = np.mean(all_mean_cov_global[i_sem]) if all_mean_cov_global[i_sem] else 0
+            MWCov[i_sem] = np.mean(all_mean_weighted_cov_global[i_sem]) if all_mean_weighted_cov_global[i_sem] else 0
+            tp = np.sum(tpsins_global[i_sem])
+            fp = np.sum(fpsins_global[i_sem])
+            rec = tp / (total_gt_ins_global[i_sem] + 1e-8)
+            prec = tp / (tp + fp + 1e-8)
+            precision[i_sem], recall[i_sem] = prec, rec
+            RQ[i_sem] = 2 * prec * rec / (prec + rec + 1e-8)
+            SQ[i_sem] = IoU_Tp_global[i_sem] / (tp + 1e-8)
+            PQ[i_sem] = SQ[i_sem] * RQ[i_sem]
+        valid_ins_classes = [i for i in INS_CLASS_IDS if total_gt_ins_global[i] > 0]
+        if not valid_ins_classes: valid_ins_classes = INS_CLASS_IDS # Avoid division by zero if no GT
+
+        metrics['mMWCov'] = np.mean(MWCov[valid_ins_classes])
+        metrics['mMUCov'] = np.mean(MUCov[valid_ins_classes])
+        metrics['mPrecision'] = np.mean(precision[valid_ins_classes])
+        metrics['mRecall'] = np.mean(recall[valid_ins_classes])
+        metrics['F1'] = (2 * metrics['mPrecision'] * metrics['mRecall']) / (metrics['mPrecision'] + metrics['mRecall'] + 1e-8)
+        metrics['mPQ'] = np.mean(PQ[valid_ins_classes])
+        metrics['mSQ'] = np.mean(SQ[valid_ins_classes])
+        metrics['mRQ'] = np.mean(RQ[valid_ins_classes])
+
+        log_str = 'Evaluation Results:\n'
+        log_str += f"mIoU: {metrics['mIoU']:.4f}, mIoU_binary: {metrics['mIoU_binary']:.4f}\n"
+        log_str += f"mPQ: {metrics['mPQ']:.4f}, mSQ: {metrics['mSQ']:.4f}, mRQ: {metrics['mRQ']:.4f}\n"
+        log_str += f"mPrecision: {metrics['mPrecision']:.4f}, mRecall: {metrics['mRecall']:.4f}, F1: {metrics['F1']:.4f}\n"
+        log_str += f"mMUCov: {metrics['mMUCov']:.4f}, mMWCov: {metrics['mMWCov']:.4f}"
+        logger.info(log_str)
+        
         return metrics
-
-    def map_inst_markup(self,
-                        pts_semantic_mask,
-                        pts_instance_mask,
-                        valid_class_ids,
-                        num_stuff_cls):
-        """Map gt instance and semantic classes back from panoptic annotations.
-
-        Args:
-            pts_semantic_mask (np.array): of shape (n_raw_points,)
-            pts_instance_mask (np.array): of shape (n_raw_points.)
-            valid_class_ids (Tuple): of len n_instance_classes
-            num_stuff_cls (int): number of stuff classes
-        
-        Returns:
-            Tuple:
-                np.array: pts_semantic_mask of shape (n_raw_points,)
-                np.array: pts_instance_mask of shape (n_raw_points,)
-        """
-        pts_instance_mask -= num_stuff_cls
-        pts_instance_mask[pts_instance_mask < 0] = -1
-        pts_semantic_mask -= num_stuff_cls
-        pts_semantic_mask[pts_instance_mask == -1] = -1
-
-        mapping = np.array(list(valid_class_ids) + [-1])
-        pts_semantic_mask = mapping[pts_semantic_mask]
-        
-        return pts_semantic_mask, pts_instance_mask
 
 
 @METRICS.register_module()

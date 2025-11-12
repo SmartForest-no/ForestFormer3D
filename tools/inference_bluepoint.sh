@@ -1,7 +1,7 @@
 # Define paths
-TEST_LIST_INIT="/workspace/data/ForAINetV2/meta_data/test_list_initial.txt"
-TEST_LIST="/workspace/data/ForAINetV2/meta_data/test_list.txt"
-TEST_DATA_DIR="/workspace/data/ForAINetV2/test_data"
+TEST_LIST_INIT="data/ForAINetV2/meta_data/test_list_initial.txt"
+TEST_LIST="data/ForAINetV2/meta_data/test_list.txt"
+TEST_DATA_DIR="data/ForAINetV2/test_data"
 WORK_DIR="/workspace"
 CONFIG_FILE="$WORK_DIR/configs/oneformer3d_qs_radius16_qp300_2many.py"
 MODEL_PATH="$WORK_DIR/work_dirs/clean_forestformer/epoch_3000_fix.pth"
@@ -9,7 +9,7 @@ ITERATIONS=2  # Default number of iterations
 ####BLUEPOINTS_DIR="$WORK_DIR/work_dirs/bluepoint_th04fixed_03_priority_test"
 BLUEPOINTS_DIR="$WORK_DIR/work_dirs/V3"
 
-find /workspace/data/ForAINetV2/forainetv2_instance_data -type f -name "*bluepoints*" -delete
+find data/ForAINetV2/forainetv2_instance_data -type f -name "*bluepoints*" -delete
 
 # Iterate through all test files listed in test_list_initial.txt
 while IFS= read -r scan_name || [ -n "$scan_name" ]; do

@@ -25,7 +25,7 @@ if __name__ == '__main__':
     stuff_classes = [1]
     thing_classes = [2,3]
     # Initialize...
-    #test_sem_path = '/workspace/work_dirs/oneformer3d_outputfolder_continue'
+    #test_sem_path = 'work_dirs/oneformer3d_outputfolder_continue'
     
     LOG_FOUT = open(test_sem_path + '/evaluation_total_test.txt', 'a')  # @Treeins: save evaluation file with name output_file_name
 

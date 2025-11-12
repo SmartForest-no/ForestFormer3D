@@ -165,7 +165,9 @@ test_pipeline = [
 # run settings
 train_dataloader = dict(
     batch_size=2,
-    num_workers=6,
+    num_workers=12,
+    prefetch_factor=10,
+    pin_memory=True,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
@@ -244,7 +246,7 @@ vis_backends = [dict(type='LocalVisBackend'),
 visualizer = dict(
     type='Det3DLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 
-#load_from = '/workspace/work_dirs/pre_trained/trained_fix.pth'   # load pre-trained model
+#load_from = 'work_dirs/pre_trained/trained_fix.pth'   # load pre-trained model
 
 train_cfg = dict(
     type='EpochBasedTrainLoop',

@@ -766,7 +766,7 @@ class ForAINetV2OneFormer3D(Base3DDetector):
                 pc3_semantic_gt = pts_semantic_gt[originids]
                 pc3_instance_gt = pts_instance_gt[originids]
                 # Save each pc3 to a separate .ply file
-                #region_dir = f"/workspace/work_dirs/oneformer3d_radius20_e2039_test_bm2/{current_filename}/region_{region_idx}"
+                #region_dir = f"work_dirs/oneformer3d_radius20_e2039_test_bm2/{current_filename}/region_{region_idx}"
                 #region_ply_path = os.path.join(region_dir, "pc_ins_sem.ply")
                 #self.save_ply(pc3.cpu().numpy(), results_list[0].pts_semantic_mask[0], results_list[0].pts_instance_mask[1], region_ply_path, pc3_semantic_gt, pc3_instance_gt)
 
@@ -801,7 +801,7 @@ class ForAINetV2OneFormer3D(Base3DDetector):
                     unique_best_masks.append((mask_points, instance_id, score))
 
             # Save the best masks
-            #best_mask_dir = f"/workspace/work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}/best_masks_before_block_merge"
+            #best_mask_dir = f"work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}/best_masks_before_block_merge"
             #os.makedirs(best_mask_dir, exist_ok=True)
             #for mask_points, instance_id, score in unique_best_masks:
             #    mask_file_path = os.path.join(best_mask_dir, f"best_mask_{instance_id}_{score}.ply")
@@ -812,7 +812,7 @@ class ForAINetV2OneFormer3D(Base3DDetector):
             clean_all_pre_ins, merged_masks = self.merge_overlapping_instances_by_score(all_pre_ins, unique_best_masks)
 
             # Save the masks after block merge
-            #best_mask_after_merge_dir = f"/workspace/work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}/best_masks_after_block_merge"
+            #best_mask_after_merge_dir = f"work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}/best_masks_after_block_merge"
             #os.makedirs(best_mask_after_merge_dir, exist_ok=True)
             #for mask_points, instance_id, score in merged_masks:
             #    mask_file_path = os.path.join(best_mask_after_merge_dir, f"best_mask_{instance_id}_{score}.ply")
@@ -826,7 +826,7 @@ class ForAINetV2OneFormer3D(Base3DDetector):
             clean_all_pre_ins = np.vectorize(relabel_map.get)(clean_all_pre_ins)
 
             # Save the final combined results
-            region_path = f"/workspace/work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}_final_results.ply"
+            region_path = f"work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}_final_results.ply"
             self.save_ply_withscore(original_points.cpu().numpy(), final_semantic_labels, clean_all_pre_ins, global_instance_scores, region_path, pts_semantic_gt, pts_instance_gt)
             
             for i, data_sample in enumerate(batch_data_samples):
@@ -2109,7 +2109,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             # Initialize an empty set to store the covered instance labels
             covered_instance_labels_qp = set()
 
-            output_path = "/workspace/work_dirs/oneformer3d_outputfolder"
+            output_path = "work_dirs/oneformer3d_outputfolder"
             for region_idx, region in enumerate(tqdm(regions, desc="Processing regions")):
                 region_mask = ((original_points[:, 0] - region[0]) ** 2 + (original_points[:, 1] - region[1]) ** 2) <= self.radius ** 2
                 pc1 = original_points[region_mask]
@@ -2295,7 +2295,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
 
             all_instance_labels = set(np.unique(pts_instance_gt))
             
-            output_path = "/workspace/work_dirs/bluepoint_th04fixed_03_priority_test"
+            output_path = "work_dirs/bluepoint_th04fixed_03_priority_test"
             score_th1 = self.score_th#0.4
             score_th2 = 0.3
             for region_idx, region in enumerate(tqdm(regions, desc="Processing regions")):
@@ -2326,7 +2326,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                 bi_semantic_logits = self.BiSemantic(x[0]) 
                 #semantic_logits = self.Semantic(x[0])
                 #qscore_logits = self.score_query(embed_logits)
-                #region_dir = f"/workspace/work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/region_{region_idx}"
+                #region_dir = f"work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/region_{region_idx}"
                 #region_dir = os.path.join(output_path, current_filename, f"region_{region_idx}")
                 #os.makedirs(region_dir, exist_ok=True)
 
@@ -2567,7 +2567,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                     #pc3_semantic_gt = pts_semantic_gt[originids]
                     #pc3_instance_gt = pts_instance_gt[originids]
                     # Save each pc3 to a separate .ply file
-                    #region_dir = f"/workspace/work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/region_{region_idx}"
+                    #region_dir = f"work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/region_{region_idx}"
                     #region_dir = os.path.join(output_path, current_filename, f"region_{region_idx}")
                     #region_ply_path = os.path.join(region_dir, "pc_ins_sem.ply")
                     ####self.save_ply(pc3.cpu().numpy(), results_list[0].pts_semantic_mask[0], results_list[0].pts_instance_mask[1], region_ply_path, pc3_semantic_gt, pc3_instance_gt)
@@ -2612,7 +2612,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                     #pc3_semantic_gt = pts_semantic_gt[originids]
                     #pc3_instance_gt = pts_instance_gt[originids]
                     # Save each pc3 to a separate .ply file
-                    #region_dir = f"/workspace/work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/region_{region_idx}"
+                    #region_dir = f"work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/region_{region_idx}"
                     #region_dir = os.path.join(output_path, current_filename, f"region_{region_idx}")
                     #region_ply_path = os.path.join(region_dir, "pc_ins_sem.ply")
                     #####self.save_ply(pc3.cpu().numpy(), semantic_predictions_pc3, semantic_predictions_pc3, region_ply_path, pc3_semantic_gt, pc3_instance_gt)
@@ -2683,7 +2683,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
 
             # Save the best masks
             #best_mask_dir = os.path.join(output_path, current_filename, "best_masks_before_block_merge")
-            #best_mask_dir = f"/workspace/work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/best_masks_before_block_merge"
+            #best_mask_dir = f"work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/best_masks_before_block_merge"
             #os.makedirs(best_mask_dir, exist_ok=True)
             #for mask_points, instance_id, score in unique_best_masks:
             #    mask_file_path = os.path.join(best_mask_dir, f"best_mask_{instance_id}_{score}.ply")
@@ -2695,7 +2695,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
 
             # Save the masks after block merge
             #best_mask_after_merge_dir = os.path.join(output_path, current_filename, "best_masks_after_block_merge")
-            #best_mask_after_merge_dir = f"/workspace/work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/best_masks_after_block_merge"
+            #best_mask_after_merge_dir = f"work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}/best_masks_after_block_merge"
             #os.makedirs(best_mask_after_merge_dir, exist_ok=True)
             #for mask_points, instance_id, score in merged_masks:
             #    mask_file_path = os.path.join(best_mask_after_merge_dir, f"best_mask_{instance_id}_{score}.ply")
@@ -2722,7 +2722,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             # Save the final combined results
             #region_path = os.path.join(output_path, f"{current_filename}_final_results.ply")
             region_path = os.path.join(output_path, f"{current_filename}.ply")
-            #region_path = f"/workspace/work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}_final_results.ply"
+            #region_path = f"work_dirs/oneformer3d_qs_radius16_qp300_e1950_test_bm3/{current_filename}_final_results.ply"
             
             #self.save_ply_withscore(original_points.cpu().numpy(), final_semantic_labels, clean_all_pre_ins, merged_instance_scores, region_path, pts_semantic_gt, pts_instance_gt)
             self.save_bluepoints(original_points.cpu().numpy(), final_semantic_labels, clean_all_pre_ins, merged_instance_scores, region_path, pts_semantic_gt, pts_instance_gt)
