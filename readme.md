@@ -12,6 +12,11 @@ This is the official implementation of the paper:
 
 ---
 
+🆕 📢 ## For a faster way to run ForestFormer3D inference on your own test data, please use the following instruction:
+[FF3D_inference – ff3d_forestsens](https://github.com/bxiang233/FF3D_inference/tree/main/ff3d_forestsens)
+
+This version uses 2 inference iterations by default. If your trees are not extremely densely distributed, you can set the number of iterations to 1 instead.
+
 # ForestFormer3D environment setup
 This guide provides step-by-step instructions to build and configure the Docker environment for ForestFormer3D, set up debugging in Visual Studio Code, and resolve common issues.
 
