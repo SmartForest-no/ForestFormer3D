@@ -4,11 +4,26 @@ This is the official implementation of the paper:
 
 **"ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds"**
 
-(*Accepted as Oral at ICCV 2025 – see you in 🏝️ Honolulu!* 🎉)
+(*Accepted as Oral at ICCV 2025 –  🏝️ Honolulu!* 🎉)
 
 - 🌐 [Project page](https://bxiang233.github.io/FF3D/)
 - 📄 [Paper on arXiv](https://www.arxiv.org/abs/2506.16991)
 - 📦 [Dataset & pre-trained model on zenodo](https://zenodo.org/records/16742708)
+
+---
+
+## 📚 Citation
+
+If you find this project helpful, please cite our paper:
+
+```bibtex
+@inproceedings{xiang2025forestformer3d,
+  title     = {ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds},
+  author    = {Binbin Xiang and Maciej Wielgosz and Stefano Puliti and Kamil Král and Martin Krůček and Azim Missarov and Rasmus Astrup},
+  booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+  year      = {2025}
+}
+```
 
 ---
 
@@ -329,20 +344,6 @@ service ssh restart
 
 To connect via SSH in VS Code, ensure you forward port 22 of the container to a host port during docker run. For example, include -p 127.0.0.1:49211:22 in your docker run command.
 
-## 📚 Citation
-
-If you find this project helpful, please cite our paper:
-
-```bibtex
-@inproceedings{xiang2025forestformer3d,
-  title     = {ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds},
-  author    = {Binbin Xiang and Maciej Wielgosz and Stefano Puliti and Kamil Král and Martin Krůček and Azim Missarov and Rasmus Astrup},
-  booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
-  year      = {2025}
-}
-```
-
----
 
 ## 🌲 Handling missed detections in dense test data
 
