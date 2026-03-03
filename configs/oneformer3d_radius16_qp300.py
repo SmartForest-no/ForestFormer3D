@@ -19,6 +19,8 @@ model = dict(
     min_spatial_shape=128,
     stuff_classes=[0],
     thing_cls=[1, 2],
+    prepare_epoch=-1,#15000,
+    prepare_epoch2=-1,#25000,
     radius=radius,
     backbone=dict(
         type='SpConvUNet',
@@ -27,8 +29,8 @@ model = dict(
     decoder=dict(
         type='ForAINetv2QueryDecoder',
         num_layers=6,
-        num_classes=1, 
-        num_instance_queries=300,  #modify the number of query points
+        num_classes=1, #num_instance_classes,
+        num_instance_queries=300,
         num_semantic_queries=num_semantic_classes,
         num_instance_classes=num_instance_classes,
         in_channels=32,
@@ -52,6 +54,7 @@ model = dict(
             matcher=dict(
                 type='HungarianMatcher',
                 costs=[
+                    #dict(type='QueryClassificationCost', weight=0.5),
                     dict(type='MaskBCECost', weight=1.0),
                     dict(type='MaskDiceCost', weight=1.0)]),
             loss_weight=[1.0, 1.0, 0.5],
@@ -80,6 +83,11 @@ data_prefix = dict(
     pts='points',
     pts_instance_mask='instance_mask',
     pts_semantic_mask='semantic_mask')
+#class_names_forainetv2 = (
+#    'tree')
+#metainfo_forainetv2 = dict(
+#    classes=class_names_forainetv2,
+#    ignore_index=num_semantic_classes)
 
 train_pipeline = [
     dict(
@@ -157,6 +165,13 @@ test_pipeline = [
         with_label_3d=False,
         with_mask_3d=True,
         with_seg_3d=True),
+    #dict(type='CylinderCrop', radius=8),
+    #dict(type='GridSample', grid_size=0.2),
+    #dict(
+    #    type='PointSample_',
+    #    num_points=160000),
+    #dict(type='PointInstClassMapping_',
+    #    num_classes=num_instance_classes),
     dict(type='Pack3DDetInputs_', keys=['points', 'gt_labels_3d', 'pts_semantic_mask', 'pts_instance_mask'])
 ]
 
@@ -199,6 +214,7 @@ test_dataloader = dict(
         backend_args=None))
 
 class_names = ['ground', 'wood', 'leaf']
+#class_names += ['unlabeled']
 label2cat = {i: name for i, name in enumerate(class_names)}
 metric_meta = dict(
     label2cat=label2cat,
@@ -228,6 +244,8 @@ optim_wrapper = dict(
 param_scheduler = dict(type='PolyLR', begin=0, end=450000, power=0.9, by_epoch=False)
 
 custom_hooks = [dict(type='EmptyCacheHook', after_iter=True)]
+#default_hooks = dict(
+#    checkpoint=dict(interval=1, max_keep_ckpts=3))
 default_hooks = dict(
     checkpoint=dict(
         type='CheckpointHook',
@@ -236,17 +254,34 @@ default_hooks = dict(
         save_optimizer=True),
         logger=dict(type='LoggerHook', interval=20),
         visualization=dict(type='Det3DVisualizationHook', draw=False))
+#default_hooks = dict(logger=dict(type='LoggerHook', interval=20))
+#log_config = dict(
+#    interval=50,
+#    hooks=[
+#        dict(type='TextLoggerHook'),
+#        dict(type='TensorboardLoggerHook')
+#    ])
 
 vis_backends = [dict(type='LocalVisBackend'),
                 dict(type='TensorboardVisBackend')]
 visualizer = dict(
     type='Det3DLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 
-#load_from = 'work_dirs/epoch_last_fix.pth'   # load pre-trained model
+#visualizer=dict(type='Visualizer', vis_backends=[dict(type='TensorboardVisBackend')])
+
+#interval = 2 #3000
+#max_iters = 450000
+#train_cfg = dict(
+#    type='IterBasedTrainLoop',
+#    max_iters=max_iters,
+#   val_interval=interval)
+
+#load_from = 'work_dirs/test_0910/epoch_last.pth'  #3 heads  stage 1
+#load_from = 'work_dirs/test_0917_euclidean_a3b6/last_epoch.pth'  #stage 2: scores for query points
 
 train_cfg = dict(
     type='EpochBasedTrainLoop',
-    max_epochs=3000,
+    max_epochs=450000,
     val_interval=100)
 
 val_cfg = dict(type='ValLoop')
