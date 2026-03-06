@@ -57,68 +57,23 @@ def extract_bbox(mesh_vertices, label_ids, instance_ids, bg_sem=np.array([0])):
     instance_ids_filtered = instance_ids[valid_mask]
     if instance_ids_filtered.size == 0:
         return np.zeros((0, 7))
-    # Use pandas for efficient grouped aggregation, which is much faster
+        
     df = pd.DataFrame(mesh_vertices[:, :3], columns=['x', 'y', 'z'])
     df['instance_id'] = instance_ids_filtered
-    # Group by instance_id and calculate min/max for each coordinate
     grouped = df.groupby('instance_id')[['x', 'y', 'z']].agg(['min', 'max'])
-    # Calculate bounding box properties in a vectorized way
     min_pts = grouped.loc[:, (slice(None), 'min')].values
     max_pts = grouped.loc[:, (slice(None), 'max')].values
     locations = (min_pts + max_pts) / 2
     dimensions = max_pts - min_pts
-    # Create the final bounding box array
     num_instances = len(grouped)
     instance_bboxes = np.hstack([locations, dimensions, np.ones((num_instances, 1))])
-    # instance_ids = instance_ids[valid_mask]
-    # label_ids = label_ids[valid_mask]
-    # # Get the number of unique instances
-    # unique_instance_ids = np.unique(instance_ids)
-    # num_instances = len(unique_instance_ids)
-    # # Initialize instance_bboxes
-    # instance_bboxes = np.zeros((num_instances, 7))
-    # for i, instance_id in enumerate(unique_instance_ids):
-    #     # Select points corresponding to the current instance
-    #     mask = instance_ids == instance_id
-    #     pts = mesh_vertices[mask, :3]
-    #     if pts.shape[0] == 0:
-    #         continue
-    #     # Calculate min_pts, max_pts, locations, and dimensions
-    #     min_pts = pts.min(axis=0)
-    #     max_pts = pts.max(axis=0)
-    #     locations = (min_pts + max_pts) / 2
-    #     dimensions = max_pts - min_pts
-    #     # Store the results in instance_bboxes
-    #     instance_bboxes[i, :3] = locations
-    #     instance_bboxes[i, 3:6] = dimensions
-    #     instance_bboxes[i, 6] = 1
     return instance_bboxes
 
 def export(ply_file,
            output_file=None,
            test_mode=False):
-    """Export original files to vert, ins_label, sem_label and bbox file.
-    Args:
-        ply_file (str): Path of the ply_file.
-        output_file (str): Path of the output folder.
-            Default: None.
-        test_mode (bool): Whether is generating test data without labels.
-            Default: False.
-    It returns a tuple, which contains the the following things:
-        np.ndarray: Vertices of points data.
-        np.ndarray: Indexes of label.
-        np.ndarray: Indexes of instance.
-        np.ndarray: Instance bboxes.
-        dict: Map from object_id to label_id.
-    """
-    #from plyfile import PlyData, PlyElement
-    #def read_ply(filename):
-    #    """Read a PLY file and return its contents as a dictionary."""
-    #    ply_data = PlyData.read(filename)
-    #    data = ply_data['vertex'].data
-    #    return {key: data[key] for key in data.dtype.names}
+    """Export original files to vert, ins_label, sem_label and bbox file."""
     pcd = read_ply(ply_file)
-    #points = np.vstack((pcd['x'], pcd['y'], pcd['z'])).astype(np.float32).T
     points = np.vstack((pcd['x'], pcd['y'], pcd['z'])).astype(np.float64).T
     is_blue = 'bluepoints' in os.path.basename(ply_file)
     if is_blue:
@@ -134,15 +89,10 @@ def export(ply_file,
         points[:, 1] -= mean_y
         points[:, 2] -= min_z
     points = points.astype(np.float32)
-    #semantic_seg = np.ones((points.shape[0],), dtype=np.int64)
-    #treeID = np.zeros((points.shape[0],), dtype=np.int64)
     semantic_seg = pcd["semantic_seg"].astype(np.int64)
     treeID = pcd["treeID"].astype(np.int64)
-    #semantic_seg = pcd["semantic"].astype(np.int64)
-    #treeID = pcd["instance"].astype(np.int64)
     # test set data doesn't have align_matrix
-    axis_align_matrix = np.eye(4)
-    axis_align_matrix = np.array(axis_align_matrix).reshape((4, 4))
+    axis_align_matrix = np.eye(4).reshape((4, 4))
     # perform global alignment of mesh vertices
     pts = np.ones((points.shape[0], 4))
     pts[:, 0:3] = points[:, 0:3]
@@ -150,55 +100,28 @@ def export(ply_file,
     aligned_mesh_vertices = pts[:, 0:3]
     # Load semantic and instance labels
     if not test_mode:
-        # semantic label
-        bg_sem=np.array([0])   #####wythan wood np.array([1])
+        bg_sem = np.array([0])
         label_ids = semantic_seg - 1
         print(f"    [DEBUG] Unique semantic_seg from PLY: {np.unique(semantic_seg)}")
         print(f"    [DEBUG] Unique label_ids (after -1): {np.unique(label_ids)}")
         print(f"    [DEBUG] Unique treeID from PLY: {np.unique(treeID)}")
-        
-        # Check for non-ground points
         non_ground_mask = ~np.isin(label_ids, bg_sem)
         print(f"    [DEBUG] Found {np.sum(non_ground_mask)} non-ground points (wood/leaf).")
-        # --- End of Added Debug Code ---
-        instance_ids = treeID  # 0: unannotated
-        # Set instance_ids of background points to -1
-        instance_ids[np.isin(label_ids, bg_sem)] = -1
-    
-        '''
-        # Get unique instance IDs that are not -1
-        unique_instance_ids = np.unique(instance_ids[instance_ids != -1])
-    
-        # Create a mapping from old instance IDs to new instance IDs
-        new_instance_id_map = {old_id: new_id for new_id, old_id in enumerate(unique_instance_ids,start=1)} #####wythan wood start=0)}
-    
-        # Update instance_ids with new instance IDs
-        new_instance_ids = np.zeros_like(instance_ids)
-        for old_id, new_id in new_instance_id_map.items():
-            new_instance_ids[instance_ids == old_id] = new_id
-        # Set background points back to 0
-        new_instance_ids[instance_ids == -1] = 0
-        instance_ids = new_instance_ids
-        '''
-        # Create a mask for non-background points
-        # valid_mask = instance_ids != -1
-        # # Create a new array for instance IDs, initialized to 0
-        # new_instance_ids = np.zeros_like(instance_ids)
-        # # Keep the original instance IDs without making them continuous
-        # new_instance_ids[valid_mask] = instance_ids[valid_mask]
-        # # Set background points back to 0
-        # new_instance_ids[instance_ids == -1] = 0
-        # # Assign the result back to instance_ids
-        # instance_ids = new_instance_ids
 
+        instance_ids = treeID.copy()
+        instance_ids[np.isin(label_ids, bg_sem)] = -1
+
+        # --- FAST vectorized ID remapping (replaces O(N*K) Python for-loop) ---
         unique_instance_ids = np.unique(instance_ids[instance_ids != -1])
-        new_instance_id_map = {old_id: new_id for new_id, old_id in enumerate(unique_instance_ids,start=1)}
         new_instance_ids = np.zeros_like(instance_ids)
-        for old_id, new_id in new_instance_id_map.items():
-            new_instance_ids[instance_ids == old_id] = new_id
-        new_instance_ids[instance_ids == -1] = 0
+        valid_mask = instance_ids != -1
+
+        new_instance_ids = np.zeros_like(instance_ids)
+        valid_mask = instance_ids != -1
+        new_instance_ids[valid_mask] = instance_ids[valid_mask]
         instance_ids = new_instance_ids
-        
+        # ----------------------------------------------------------------------
+
         unaligned_bboxes = extract_bbox(points, label_ids, instance_ids, bg_sem)
         aligned_bboxes = extract_bbox(aligned_mesh_vertices, label_ids, instance_ids, bg_sem)
     else:
