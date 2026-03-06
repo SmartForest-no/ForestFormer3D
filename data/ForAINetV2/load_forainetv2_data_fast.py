@@ -57,7 +57,7 @@ def extract_bbox(mesh_vertices, label_ids, instance_ids, bg_sem=np.array([0])):
     instance_ids_filtered = instance_ids[valid_mask]
     if instance_ids_filtered.size == 0:
         return np.zeros((0, 7))
-        
+
     df = pd.DataFrame(mesh_vertices[:, :3], columns=['x', 'y', 'z'])
     df['instance_id'] = instance_ids_filtered
     grouped = df.groupby('instance_id')[['x', 'y', 'z']].agg(['min', 'max'])
@@ -110,12 +110,6 @@ def export(ply_file,
 
         instance_ids = treeID.copy()
         instance_ids[np.isin(label_ids, bg_sem)] = -1
-
-        # --- FAST vectorized ID remapping (replaces O(N*K) Python for-loop) ---
-        unique_instance_ids = np.unique(instance_ids[instance_ids != -1])
-        new_instance_ids = np.zeros_like(instance_ids)
-        valid_mask = instance_ids != -1
-
         new_instance_ids = np.zeros_like(instance_ids)
         valid_mask = instance_ids != -1
         new_instance_ids[valid_mask] = instance_ids[valid_mask]
