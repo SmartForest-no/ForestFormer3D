@@ -140,7 +140,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--loader',
-        default='orig',
+        default='fast',
         choices=['orig', 'fast'],
         help='Version of data loader to use.')
     parser.add_argument(
