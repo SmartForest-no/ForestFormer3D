@@ -158,16 +158,11 @@ CUDA_VISIBLE_DEVICES=0 python tools/train.py configs/oneformer3d_qs_radius16_qp3
 #### **Run testing**
 ##### Use your own trained Checkpoint
 ```bash
-#1. Fix the checkpoint file:
-python tools/fix_spconv_checkpoint.py \
-  --in-path work_dirs/oneformer3d_1xb4_forainetv2/trained.pth \
-  --out-path work_dirs/oneformer3d_1xb4_forainetv2/trained_fix.pth
+#1. Modify the output_path in function "predict" in class ForAINetV2OneFormer3D_XAwarequery in file oneformer3d/oneformer3d.py
 
-#2. Modify the output_path in function "predict" in class ForAINetV2OneFormer3D_XAwarequery in file oneformer3d/oneformer3d.py
-
-#3. Run the test script:
+#2. Run the test script:
 CUDA_VISIBLE_DEVICES=0 python tools/test.py configs/oneformer3d_qs_radius16_qp300_2many.py \
-  work_dirs/oneformer3d_1xb4_forainetv2/trained_fix.pth
+  work_dirs/oneformer3d_1xb4_forainetv2/trained.pth
 
 ```
 ##### Load pre-trained model
