@@ -478,19 +478,23 @@ class CylinderCrop(BaseTransform):
         # Select a random center point
         center = points_tensor[np.random.randint(points_tensor.shape[0])]
         
-        # Calculate indices of points within the radius
-        choices = np.where(
-            (np.sum(np.square(points_tensor[:, :2] - center[:2]), 1) < self.radius**2)
-        )[0]
-        
-        # Update points tensor
-        if "points" in input_dict.keys():
-            input_dict["points"] = input_dict["points"][choices]
+        # Optimization 1: Bounding box pre-filter to reduce expensive distance calculations
+        x_mask = (points_tensor[:, 0] >= center[0] - self.radius) & \
+                 (points_tensor[:, 0] <= center[0] + self.radius)
+        y_mask = (points_tensor[:, 1] >= center[1] - self.radius) & \
+                 (points_tensor[:, 1] <= center[1] + self.radius)
+        candidate_mask = x_mask & y_mask
+        candidate_inds = np.where(candidate_mask)[0]
+        candidate_points = points_tensor[candidate_inds]
+        dist_mask = np.sum(np.square(candidate_points[:, :2] - center[:2]), 1) < self.radius ** 2
+        choices = candidate_inds[dist_mask]
+
+        input_dict['points'] = input_dict['points'][choices]
+
         pts_instance_mask = input_dict.get('pts_instance_mask', None)
         pts_semantic_mask = input_dict.get('pts_semantic_mask', None)
         sp_pts_mask = input_dict.get('sp_pts_mask', None)
 
-        # Initialize the instance mask
         instance_mask = pts_semantic_mask != 0  # Background points have -1 in pts_instance_mask
         pts_instance_mask = pts_instance_mask.copy()
         pts_instance_mask[~instance_mask] = -1
@@ -515,9 +519,13 @@ class CylinderCrop(BaseTransform):
 
             # Calculate the ratio_inspoint
             ratio_inspoint = {}
+
+            orig_inst, orig_counts = np.unique(original_pts_instance_mask, return_counts=True)
+            orig_counts_map = dict(zip(orig_inst, orig_counts))
+
             for idx in idxs:
                 if idx != -1:  # Skip the background points
-                    original_count = np.sum(original_pts_instance_mask == idx)
+                    original_count = orig_counts_map.get(idx, 0)
                     new_count = np.sum(pts_instance_mask == mapping[idx])
                     ratio_inspoint[mapping[idx]] = new_count / original_count if original_count > 0 else 0
 
