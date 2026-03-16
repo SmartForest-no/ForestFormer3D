@@ -48,6 +48,8 @@ ply_dtypes = dict(
         (b"float", "f4"),
         (b"float64", "f8"),
         (b"double", "f8"),
+        (b"int64", "i8"),
+        (b"uint64", "u8"),
     ]
 )
 

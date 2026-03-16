@@ -1300,3 +1300,4 @@ class OneDataCriterion:
                 loss += self.get_layer_loss(aux_outputs, insts, indices)
 
         return {'inst_loss': loss}
+

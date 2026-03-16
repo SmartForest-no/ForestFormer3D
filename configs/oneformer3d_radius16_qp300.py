@@ -231,7 +231,7 @@ custom_hooks = [dict(type='EmptyCacheHook', after_iter=True)]
 default_hooks = dict(
     checkpoint=dict(
         type='CheckpointHook',
-        interval=1,
+        interval=100,
         max_keep_ckpts=3,
         save_optimizer=True),
         logger=dict(type='LoggerHook', interval=20),

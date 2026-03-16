@@ -1,0 +1,49 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Build artifacts
+build/
+dist/
+*.so
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Logs and tensorboard
+*.log
+events.out.tfevents*
+
+# Model weights and checkpoints
+*.pth
+*.pt
+*.ckpt
+*.onnx
+
+# Large point cloud / array / serialized files
+*.ply
+*.las
+*.laz
+*.bin
+*.npy
+*.npz
+*.pkl
+
+# Training / inference outputs
+work_dirs/
+runs/
+wandb/
+outputs/
+logs/
+
+# Repo-specific generated data
+data/ForAINetV2/train_val_data/
+data/ForAINetV2/test_data/
+data/ForAINetV2/forainetv2_instance_data/
+data/ForAINetV2_custom/
+data/ForAINetV2_custom_test/
+
+# Research artifacts with bulky run outputs
+Week01_FF3D_MVE/

@@ -8,15 +8,11 @@ from mmdet3d.registry import MODELS
 from mmdet3d.structures import PointData
 from mmdet3d.models import Base3DDetector
 from .mask_matrix_nms import mask_matrix_nms
-from .qps_modules import QueryPointSelector, build_centroid_offset_targets
-from .qps_diagnostics import (
-    build_region_qps_diagnostics, build_scene_small_tree_profile,
-    maybe_build_qps_diagnostic_recorder)
 import open3d as o3d
 import os
 import numpy as np
 from tools.base_modules import Seq, MLP, FastBatchNorm1d
-from .panoptic_losses import discriminative_loss, offset_loss
+from .panoptic_losses import offset_loss, discriminative_loss, FastFocalLoss
 from torch_cluster import fps
 import re
 import math
@@ -842,7 +838,7 @@ class ForAINetV2OneFormer3D(Base3DDetector):
             # Save the final combined results
             region_path = f"/workspace/work_dirs/oneformer3d_radius16_qp300_e2675_test_bm1_austrian/{current_filename}_final_results.ply"
             self.save_ply_withscore(original_points.cpu().numpy(), final_semantic_labels, clean_all_pre_ins, global_instance_scores, region_path, pts_semantic_gt, pts_instance_gt)
-
+            
             for i, data_sample in enumerate(batch_data_samples):
                 data_sample.pred_pts_seg = results_list[i]
                 data_sample.pred_pts_seg['originids'] = originids
@@ -1777,12 +1773,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                  radius = 16,
                  score_th = 0.4,
                  chunk = 20_000,
-                 output_path = None,
-                 qps_fps_mode='baseline',
-                 qps_se_reduction=2,
-                 qps_tcfps_embed_ratio=0.6,
-                 qps_ogrd_alpha=0.1,
-                 offset_loss_weight=1.0):
+                 output_path = None):
         super(Base3DDetector, self).__init__(
             data_preprocessor=data_preprocessor, init_cfg=init_cfg)
         self.unet = MODELS.build(backbone)
@@ -1805,21 +1796,12 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
         self.score_th = score_th
         self.chunk = chunk
         self.output_path = output_path
-        self.offset_loss_weight = offset_loss_weight
-        self.query_selector = QueryPointSelector(
-            query_point_num=query_point_num,
-            fps_mode=qps_fps_mode,
-            se_reduction=qps_se_reduction,
-            tcfps_embed_ratio=qps_tcfps_embed_ratio,
-            ogrd_alpha=qps_ogrd_alpha)
         self.BiSemantic = (
             Seq()  
             .append(MLP([num_channels, num_channels], bias=False))  
             .append(torch.nn.Linear(num_channels, 2))  
             .append(torch.nn.LogSoftmax(dim=-1))  
         )
-        self.Offset = Seq().append(MLP([num_channels, num_channels], bias=False))
-        self.Offset.append(torch.nn.Linear(num_channels, 3))
     
     def _init_layers(self, in_channels, num_channels):
         self.input_conv = spconv.SparseSequential(
@@ -1914,13 +1896,10 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
 
         embed_logits = [self.Embed(y) for y in x]
         bi_semantic_logits = [self.BiSemantic(y) for y in x] 
-        offset_logits = [self.Offset(y) for y in x]
         
         # Initialize cumulative losses
         total_discriminative_loss = 0
         total_semantic_loss_bi = 0 
-        total_offset_norm_loss = 0
-        total_offset_dir_loss = 0
         batch_size = len(batch_data_samples)
 
         for i in range(batch_size):
@@ -1949,11 +1928,6 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             
             # Filter embed_logits based on valid voxels
             filtered_embed_logits = embed_logits[i][valid_voxel_indices]  # Select only the valid voxels
-            filtered_offset_logits = offset_logits[i][valid_voxel_indices]
-            if self.query_selector.fps_mode == 'ogrd':
-                # Train OGRD parameters with discriminative supervision.
-                filtered_embed_logits = self.query_selector.build_ogrd_features(
-                    filtered_embed_logits, filtered_offset_logits)
         
             # Use voxel_instance_labels for discriminative loss
             batch = torch.full_like(voxel_instance_labels, i)  # Simulating batch index for each voxel
@@ -1989,47 +1963,23 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             # Accumulate semantic loss for the batch
             total_semantic_loss_bi += semantic_loss_bi
 
-            voxel_coords_int = coordinates[coordinates[:, 0] == i][:, 1:].to(
-                device=offset_logits[i].device)
-            valid_voxel_coords = voxel_coords_int[valid_voxel_indices]
-            centroid_offset_labels, fg_mask = build_centroid_offset_targets(
-                valid_voxel_coords,
-                voxel_instance_labels,
-                voxel_size=self.voxel_size)
-
-            offset_pred_i = offset_logits[i][valid_voxel_indices]
-            num_fg = int(fg_mask.sum().item())
-            if num_fg > 0:
-                offset_losses_i = offset_loss(
-                    offset_pred_i[fg_mask],
-                    centroid_offset_labels[fg_mask],
-                    num_fg)
-                total_offset_norm_loss += offset_losses_i['offset_norm_loss']
-                total_offset_dir_loss += offset_losses_i['offset_dir_loss']
-            else:
-                zero_loss = offset_pred_i.sum() * 0
-                total_offset_norm_loss += zero_loss
-                total_offset_dir_loss += zero_loss
-
         # Average the accumulated losses over the batch
         total_discriminative_loss /= batch_size
         total_semantic_loss_bi /= batch_size
-        total_offset_norm_loss /= batch_size
-        total_offset_dir_loss /= batch_size
 
         # Add to total loss
         loss_final = {
             'discriminative_loss': total_discriminative_loss,
-            'semantic_loss_bi': total_semantic_loss_bi,
-            'offset_norm_loss': total_offset_norm_loss * self.offset_loss_weight,
-            'offset_dir_loss': total_offset_dir_loss * self.offset_loss_weight
+            'semantic_loss_bi': total_semantic_loss_bi
         }
 
         queries = []
         queries_inslabel = []
+        queries_idx = []
 
         if self.prepare_epoch:
             if kwargs['epoch'] > self.prepare_epoch:
+                total_qscore_loss = 0
                 for i in range(batch_size):
                     voxel_superpoints = inverse_mapping[coordinates[:, 0][inverse_mapping] == i]
                     voxel_superpoints = torch.unique(voxel_superpoints, return_inverse=True)[1]
@@ -2049,14 +1999,19 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                         
                         wood_class = 1
                         
-                        semantic_predictions_bi = torch.softmax(bi_semantic_logits[i], dim=-1)[:, wood_class]
-                        tree_indices = torch.where(semantic_predictions_bi > 0.3)[0]  #all voxel
-                        selected_indices_case4 = self.query_selector.select_indices(
-                            tree_indices, embed_logits[i], offset_logits[i])
-                        if selected_indices_case4.numel() == 0:
-                            queries.append([])
-                            queries_inslabel.append([])
-                            continue
+                        semantic_predictions_bi = torch.argmax(bi_semantic_logits[i], dim=1)
+                        tree_indices = torch.where(semantic_predictions_bi == wood_class)[0]  #all voxel
+                        
+                        #FPS from all tree points
+                        batch_tensor_4 = torch.zeros(embed_logits[i][tree_indices].size(0), dtype=torch.long).to(embed_logits[i].device)  # Ensure batch_tensor on same device
+                        topk_indices_4 = fps(embed_logits[i][tree_indices], batch_tensor_4, ratio=min(self.query_point_num / embed_logits[i][tree_indices].size(0), torch.tensor([1.0]).to(embed_logits[i].device)))
+                        selected_indices_case4 = tree_indices[topk_indices_4]
+
+                        # Retrieve relevant information for the selected points
+                        current_points = batch_inputs_dict['points'][i]
+                        current_points_add = scatter_add(current_points, voxel_superpoints, dim=0)
+                        voxel_counts = scatter_add(torch.ones_like(current_points[:, 0].float()), voxel_superpoints, dim=0)
+                        avg_points = current_points_add / voxel_counts.unsqueeze(-1).clamp(min=1)
 
                         # add content queries
                         queries.append(x[i][selected_indices_case4])
@@ -2069,6 +2024,8 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
 
                         # ins labels for queries
                         queries_inslabel.append(voxel_instance_labels[selected_indices_case4])
+
+                        queries_idx.append(selected_indices_case4)
 
                 if all(len(q) == 0 for q in queries):
                     pass
@@ -2195,16 +2152,18 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                 x = self.extract_feat(x)
 
                 embed_logits = self.Embed(x[0])
-                offset_logits = self.Offset(x[0])
                 bi_semantic_logits = self.BiSemantic(x[0]) 
 
                 wood_class = 1
-                semantic_predictions_bi = torch.softmax(bi_semantic_logits, dim=-1)[:, wood_class]
-                tree_indices = torch.where(semantic_predictions_bi > 0.3)[0]  #all voxel
+                semantic_predictions_bi = torch.argmax(bi_semantic_logits, dim=1)
+                tree_indices = torch.where(semantic_predictions_bi == wood_class)[0]  #all voxel
                     
                 if tree_indices.numel() > 0:
-                    selected_indices_case4 = self.query_selector.select_indices(
-                        tree_indices, embed_logits, offset_logits)
+                    
+                    # FPS from all tree points
+                    batch_tensor_4 = torch.zeros(embed_logits[tree_indices].size(0), dtype=torch.long).to(embed_logits.device)  # Ensure batch_tensor on same device
+                    topk_indices_4 = fps(embed_logits[tree_indices], batch_tensor_4, ratio=min(self.query_point_num / embed_logits[tree_indices].size(0), torch.tensor([1.0]).to(embed_logits.device)))
+                    selected_indices_case4 = tree_indices[topk_indices_4]
 
                     # add content queries
                     queries = []
@@ -2326,25 +2285,7 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             num_points = 640000
             pts_semantic_gt = batch_data_samples[0].eval_ann_info['pts_semantic_mask']
             pts_instance_gt = batch_data_samples[0].eval_ann_info['pts_instance_mask']
-            if isinstance(pts_semantic_gt, torch.Tensor):
-                pts_semantic_gt_arr = pts_semantic_gt.cpu().numpy()
-            else:
-                pts_semantic_gt_arr = np.asarray(pts_semantic_gt)
-            if isinstance(pts_instance_gt, torch.Tensor):
-                pts_instance_gt_arr = pts_instance_gt.cpu().numpy()
-            else:
-                pts_instance_gt_arr = np.asarray(pts_instance_gt)
             original_points = batch_inputs_dict['points'][0]
-            scene_small_tree_profile = None
-            if os.environ.get('FF3D_QPS_DIAG', '0') == '1' or \
-                    os.environ.get('FF3D_QPS_DIAG_DIR'):
-                scene_small_tree_profile = build_scene_small_tree_profile(
-                    original_points[:, :3],
-                    pts_semantic_gt_arr,
-                    pts_instance_gt_arr,
-                    small_tree_ratio=float(
-                        os.environ.get('FF3D_QPS_DIAG_SMALL_TREE_RATIO',
-                                       1.0 / 3.0)))
             regions = self.generate_cylindrical_regions(original_points, self.radius, step_size)
             num_cls = self.test_cfg.num_sem_cls        
             votes_counter = np.zeros(                    # (N_total, num_cls)
@@ -2367,21 +2308,12 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                 "FF3D_OUTPUT_PATH",
                 os.environ.get("BLUEPOINTS_DIR", "/workspace/work_dirs/run0_pretrained_bluepoints"),
             )
-            os.makedirs(output_path, exist_ok=True)
             score_th1 = float(os.environ.get("FF3D_SCORE_TH1", self.score_th))
             score_th2 = float(os.environ.get("FF3D_SCORE_TH2", 0.3))
             disable_edge_filter = os.environ.get("FF3D_DISABLE_EDGE_FILTER", "0") == "1"
             edge_margin = float(os.environ.get("FF3D_EDGE_MARGIN", 0.5))
             disable_small_instance_filter = os.environ.get("FF3D_DISABLE_SMALL_INSTANCE_FILTER", "0") == "1"
             min_inst_points = int(os.environ.get("FF3D_MIN_INST_POINTS", 10))
-            tree_prob_thr = float(os.environ.get("FF3D_TREE_PROB_THR", 0.3))
-            diag_recorder = maybe_build_qps_diagnostic_recorder(
-                scene_name=current_filename,
-                lidar_path=lidar_path,
-                output_root=output_path,
-                fps_mode=self.query_selector.fps_mode,
-                query_budget=self.query_point_num,
-                scene_small_tree_profile=scene_small_tree_profile)
             t2 = time.time()   
             last_results   = None    
             last_originids = None              
@@ -2418,12 +2350,11 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                 t4_4 = time.time() 
                 #########print(f"u net 4: {(t4_4 - t4_3)*1000:.0f} ms")
                 embed_logits = self.Embed(x[0])
-                offset_logits = self.Offset(x[0])
                 bi_semantic_logits = self.BiSemantic(x[0]) 
                 
                 wood_class = 1
-                semantic_predictions_bi = torch.softmax(bi_semantic_logits, dim=-1)[:, wood_class]
-                tree_indices = torch.where(semantic_predictions_bi > tree_prob_thr)[0]  # all voxel
+                semantic_predictions_bi = torch.argmax(bi_semantic_logits, dim=1)
+                tree_indices = torch.where(semantic_predictions_bi == wood_class)[0]  #all voxel
                 t5 = time.time()                 
                 #########print(f"u net heads: {(t5 - t4_4)*1000:.0f} ms")  
                 with torch.no_grad():
@@ -2435,17 +2366,12 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                             torch.cdist(pc1[ss:ee].float(), pc3.float()).argmin(1)
                         )
                     nn_idx_pc1 = torch.cat(nn_idx_pc1)   # (N_pc1,)  
-                selected_indices_case4 = torch.empty(
-                    0, dtype=torch.long, device=pc3.device)
-                decoder_retained_query_indices = torch.empty(
-                    0, dtype=torch.long, device=pc3.device)
-                external_retained_query_indices = torch.empty(
-                    0, dtype=torch.long, device=pc3.device)
-                decoder_score_values = []
-                external_score_values = []
-                if tree_indices.numel() > 0:
-                    selected_indices_case4 = self.query_selector.select_indices(
-                        tree_indices, embed_logits, offset_logits)
+                if tree_indices.numel() > 1:
+                    
+                    # FPS from all tree points
+                    batch_tensor_4 = torch.zeros(embed_logits[tree_indices].size(0), dtype=torch.long).to(embed_logits.device)  # Ensure batch_tensor on same device
+                    topk_indices_4 = fps(embed_logits[tree_indices], batch_tensor_4, ratio=min(self.query_point_num / embed_logits[tree_indices].size(0), torch.tensor([1.0]).to(embed_logits.device)))
+                    selected_indices_case4 = tree_indices[topk_indices_4]
 
                     # add content queries
                     queries = []
@@ -2461,11 +2387,6 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                     # Collect masks and their scores, process them immediately
                     masks = results_list[0].pts_instance_mask[0]
                     scores = results_list[0].instance_scores
-                    decoder_retained_query_indices = torch.as_tensor(
-                        getattr(results_list[0], 'query_select_voxel_idx', []),
-                        device=pc3.device,
-                        dtype=torch.long)
-                    decoder_score_values = scores
                     valid_scores_mask = scores > score_th1
 
                     # Prepare region for cylinder edge calculation
@@ -2511,11 +2432,6 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                         torch.tensor(valid_scores_mask, device=pc3.device) &
                         torch.tensor(valid_scores_mask2, device=pc3.device)
                     )[0]                                            # (K,)
-                    if decoder_retained_query_indices.numel():
-                        external_retained_query_indices = \
-                            decoder_retained_query_indices[keep]
-                    if len(scores):
-                        external_score_values = scores[keep.cpu().numpy()]
 
                     if keep.numel():
                         # mask/score（GPU）
@@ -2624,37 +2540,8 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
                     np.add.at(votes_counter, (ids_np, sem_np), 1) 
                     t10 = time.time()                 
                     #########print(f"postprocessing 4: {(t10 - t5)*1000:.0f} ms") 
-                if diag_recorder is not None and diag_recorder.should_record(region_idx):
-                    region_originids = pc3_indices.cpu().numpy()
-                    region_gt_semantic = pts_semantic_gt_arr[region_originids]
-                    region_gt_instance = pts_instance_gt_arr[region_originids]
-                    diag_payload = build_region_qps_diagnostics(
-                        region_idx=region_idx,
-                        region_center_xy=region,
-                        fps_mode=self.query_selector.fps_mode,
-                        query_budget=self.query_point_num,
-                        pc1_count=pc1.shape[0],
-                        pc2_count=pc2.shape[0],
-                        pc3_points=pc3,
-                        inverse_mapping=inverse_mapping2,
-                        bi_tree_prob=semantic_predictions_bi,
-                        tree_indices=tree_indices,
-                        selected_indices=selected_indices_case4,
-                        decoder_retained_indices=decoder_retained_query_indices,
-                        external_retained_indices=external_retained_query_indices,
-                        decoder_scores=decoder_score_values,
-                        external_scores=external_score_values,
-                        gt_semantic_point_labels=region_gt_semantic,
-                        gt_instance_point_labels=region_gt_instance,
-                        scene_small_instance_ids=diag_recorder.scene_small_instance_ids,
-                        small_tree_ratio=diag_recorder.small_tree_ratio,
-                        small_tree_height_threshold=diag_recorder.small_tree_height_threshold,
-                        scene_max_tree_height=diag_recorder.scene_max_tree_height,
-                        candidate_prob_threshold=tree_prob_thr,
-                        max_missed_ids=diag_recorder.max_missed_ids)
-                    diag_recorder.record_region(diag_payload)
                 del pc1, pc1_indices, pc2, pc2_indices, pc3, pc3_indices
-                del embed_logits, offset_logits, bi_semantic_logits
+                del embed_logits, bi_semantic_logits
                 torch.cuda.empty_cache() 
                 import gc
                 gc.collect()
@@ -2704,11 +2591,27 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
             ######print(f"postprocessing 8: {(t14 - t13)*1000:.0f} ms")
             # Save the final combined results
             region_path = os.path.join(output_path, f"{current_filename}.ply")
- 
-            self.save_ply_withscore(original_points.cpu().numpy(), final_semantic_labels, clean_all_pre_ins, merged_instance_scores, region_path, pts_semantic_gt_arr, pts_instance_gt_arr)
-            #self.save_bluepoints(original_points.cpu().numpy(), final_semantic_labels, clean_all_pre_ins, merged_instance_scores, region_path, pts_semantic_gt, pts_instance_gt)
-            if diag_recorder is not None:
-                diag_recorder.finalize()
+            use_bluepoints = os.environ.get("FF3D_USE_BLUEPOINTS", "0") == "1"
+            if use_bluepoints:
+                self.save_bluepoints(
+                    original_points.cpu().numpy(),
+                    final_semantic_labels,
+                    clean_all_pre_ins,
+                    merged_instance_scores,
+                    region_path,
+                    pts_semantic_gt,
+                    pts_instance_gt,
+                )
+            else:
+                self.save_ply_withscore(
+                    original_points.cpu().numpy(),
+                    final_semantic_labels,
+                    clean_all_pre_ins,
+                    merged_instance_scores,
+                    region_path,
+                    pts_semantic_gt,
+                    pts_instance_gt,
+                )
             
             t15 = time.time()                 
             ######print(f"postprocessing 9: {(t15 - t14)*1000:.0f} ms")
@@ -3900,26 +3803,25 @@ class ForAINetV2OneFormer3D_XAwarequery(Base3DDetector):
         output_dir = os.path.dirname(filename)
         os.makedirs(output_dir, exist_ok=True)
         
-        # Extract base filename and index
-        match = re.search(r'_(\d+)\.ply$', filename)
+        # Derive stable base name; avoid conflicts with scan names like "0320_003"
+        stem = os.path.splitext(os.path.basename(filename))[0]
+        match = re.search(r'__(?:bluepoints_)?iter(\d+)$', stem)
         if match:
             num = int(match.group(1)) + 1
-            base_name = filename[:match.start(1)]
+            base_stem = stem[:match.start()]
         else:
-            num = 1
-            base_name = filename.replace('.ply', '')
-            #if not base_name.endswith('_'):
-            #    base_name += '_'
+            legacy = re.search(r'_bluepoints_(\d+)$', stem)
+            if legacy:
+                num = int(legacy.group(1)) + 1
+                base_stem = stem[:legacy.start()]
+            else:
+                num = 1
+                base_stem = stem
 
-        # Ensure "bluepoints" does not get repeated in filename
-        if "bluepoints" in base_name:
-            base_name = re.sub(r'_bluepoints_', '', base_name)  # Remove trailing "_bluepoints" if it exists
-
-        new_filename = f"{base_name}_{num}.ply"
-        new_filename_filtered = f"{base_name}_bluepoints_{num}.ply"
-
-        # Determine previous bluepoints file
-        prev_bluepoints_filename = f"{base_name}_bluepoints_{num-1}.ply"
+        base_name = os.path.join(output_dir, base_stem)
+        new_filename = f"{base_name}__iter{num}.ply"
+        new_filename_filtered = f"{base_name}__bluepoints_iter{num}.ply"
+        prev_bluepoints_filename = f"{base_name}__bluepoints_iter{num-1}.ply"
 
         # If previous bluepoints file exists, load its semantic_pred
         if os.path.exists(prev_bluepoints_filename):

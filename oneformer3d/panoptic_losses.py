@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from typing import List
 from torch_points_kernels import instance_iou
 from torch_scatter import scatter
@@ -53,6 +54,19 @@ def offset_loss(pred_offsets, gt_offsets, total_instance_points):
     offset_dir_loss = torch.sum(direction_diff) / (total_instance_points + 1e-6)
 
     return {"offset_norm_loss": offset_norm_loss, "offset_dir_loss": offset_dir_loss}
+
+
+def offset_l1_loss(pred_offsets, gt_offsets, fg_mask, reduction='mean'):
+    """L1 offset regression loss on foreground voxels only."""
+    if pred_offsets.numel() == 0 or fg_mask.numel() == 0 or (not fg_mask.any()):
+        return pred_offsets.sum() * 0
+
+    if reduction == 'mean':
+        return F.l1_loss(pred_offsets[fg_mask], gt_offsets[fg_mask], reduction='mean')
+    if reduction == 'sum':
+        denom = fg_mask.sum().clamp(min=1)
+        return F.l1_loss(pred_offsets[fg_mask], gt_offsets[fg_mask], reduction='sum') / denom
+    raise ValueError(f'Unsupported reduction: {reduction}')
 
 def instance_ious(
     predicted_clusters: List[torch.Tensor],

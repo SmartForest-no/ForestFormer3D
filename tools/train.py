@@ -17,6 +17,26 @@ from mmdet3d.utils import replace_ceph_backend
 #print("Current working directory:", os.getcwd())
 #print("sys.path:", sys.path)
 
+""""
+sudo docker start forestformer3d-container
+sudo docker exec -it forestformer3d-container /bin/bash
+
+cd /workspace
+
+wandb login
+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
+
+export PYTHONPATH=/workspace
+export WANDB_PROJECT=ForestFormer3D
+export WANDB_ENTITY=wuhaili2002-cas
+export WANDB_NAME=run1_baseline
+
+CUDA_VISIBLE_DEVICES=0 python tools/train.py \
+  /workspace/configs/oneformer3d_qs_radius16_qp300_2many.py \
+  --work-dir /workspace/work_dirs/run1_baseline
+
+"""
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a 3D detector')
     parser.add_argument('config', help='train config file path')

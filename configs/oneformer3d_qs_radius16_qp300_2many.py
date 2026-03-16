@@ -20,9 +20,15 @@ model = dict(
     min_spatial_shape=128,
     stuff_classes=[0],
     thing_cls=[1, 2],
-    prepare_epoch=1000,   # -1, #700,
-    #prepare_epoch2=-1,#1000,
-    query_point_num=300,   #modify the number of query points
+    prepare_epoch=1000,
+    query_point_num=300,
+    # QPS ablation switch: 'se' | 'tcfps' | 'ogrd'
+    qps_fps_mode='ogrd',
+    qps_se_reduction=2,
+    qps_tcfps_embed_ratio=0.6,
+    # OGRD learnable alpha initialization value.
+    qps_ogrd_alpha=0.1,
+    offset_loss_weight=0.1,
     radius=radius,
     score_th = score_th,
     backbone=dict(
@@ -233,14 +239,22 @@ custom_hooks = [dict(type='EmptyCacheHook', after_iter=True)]
 default_hooks = dict(
     checkpoint=dict(
         type='CheckpointHook',
-        interval=1,
+        interval=100,
         max_keep_ckpts=3,
         save_optimizer=True),
         logger=dict(type='LoggerHook', interval=20),
         visualization=dict(type='Det3DVisualizationHook', draw=False))
 
 vis_backends = [dict(type='LocalVisBackend'),
-                dict(type='TensorboardVisBackend')]
+                dict(type='TensorboardVisBackend'),
+                dict(
+                    type='WandbVisBackend',
+                    init_kwargs=dict(
+                        entity='wuhaili2002-cas',
+                        project='ForestFormer3D',
+                        name='oneformer3d_qs_radius16_qp300_2many',
+                        mode='offline'
+            ))]
 visualizer = dict(
     type='Det3DLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 

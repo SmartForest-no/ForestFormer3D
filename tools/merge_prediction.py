@@ -9,6 +9,14 @@ from collections import defaultdict
 from tqdm import tqdm
 from joblib import Parallel, delayed
 
+NOISE_SCORE_THRESHOLD = float(os.environ.get("MERGE_NOISE_THRESHOLD", "200"))
+
+def pick_existing(paths):
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    return paths[0]
+
 def build_ground_raster(ground_points, grid_resolution=3.0):
     x = ground_points[:, 0]
     y = ground_points[:, 1]
@@ -253,10 +261,16 @@ def process_and_save_ply(points, labels, output_file):
 
     return score_array
 
-def main(scan_name, output_dir, iterations):
+def main(scan_name, output_dir, iterations, offsets_dir=None):
     print(f"Starting merge process for scan: {scan_name} with {iterations} iterations")
     
-    base_file = os.path.join(output_dir, f"{scan_name}_1.ply")
+    base_file_candidates = [
+        os.path.join(output_dir, f"{scan_name}__iter1.ply"),
+        os.path.join(output_dir, f"{scan_name}_1.ply"),
+    ]
+    base_file = pick_existing(base_file_candidates)
+    if not os.path.exists(base_file):
+        raise FileNotFoundError(f"Base prediction file not found: {base_file}")
 
     print(f"🔹 Loading base file: {base_file}")
     base_points, base_labels = load_ply(base_file)
@@ -272,9 +286,13 @@ def main(scan_name, output_dir, iterations):
     for i in range(1, iterations+1):
         print(f"\n=== Iteration {i}/{iterations} ===")
         if i > 1:
-            pred_file = os.path.join(output_dir, f"{scan_name}_{i}.ply")
+            pred_file_candidates = [
+                os.path.join(output_dir, f"{scan_name}__iter{i}.ply"),
+                os.path.join(output_dir, f"{scan_name}_{i}.ply"),
+            ]
+            pred_file = pick_existing(pred_file_candidates)
 
-            if os.path.exists(pred_file): 
+            if os.path.exists(pred_file):
                 print(f"Loading prediction: {pred_file}")
                 pred_points, pred_labels = load_ply(pred_file)
                 
@@ -286,7 +304,11 @@ def main(scan_name, output_dir, iterations):
             else:
                 print(f"Warning: Prediction file {pred_file} not found, skipping.")
 
-        blue_file = os.path.join(output_dir, f"{scan_name}_bluepoints_{i}.ply")
+        blue_file_candidates = [
+            os.path.join(output_dir, f"{scan_name}__bluepoints_iter{i}.ply"),
+            os.path.join(output_dir, f"{scan_name}_bluepoints_{i}.ply"),
+        ]
+        blue_file = pick_existing(blue_file_candidates)
 
         final_all_points = all_points
         final_all_labels = all_labels
@@ -299,7 +321,13 @@ def main(scan_name, output_dir, iterations):
             print(f"Warning: Bluepoints file {blue_file} not found, skipping.")
         
         
-        offset_path = os.path.join('/workspace/data/ForAINetV2/forainetv2_instance_data', scan_name + '_offsets.npy')
+        # Determine offsets path: prefer passed offsets_dir, otherwise use legacy default
+        if offsets_dir:
+            offset_path = os.path.join(offsets_dir, scan_name + '_offsets.npy')
+        else:
+            offset_path = os.path.join('/workspace/data/ForAINetV2/forainetv2_instance_data', scan_name + '_offsets.npy')
+        if not os.path.exists(offset_path):
+            raise FileNotFoundError(f"Offsets file not found: {offset_path}")
         offsets = np.load(offset_path)
         #final_all_points[:, 0] += offsets[0]
         #final_all_points[:, 1] += offsets[1]
@@ -310,40 +338,54 @@ def main(scan_name, output_dir, iterations):
         os.makedirs(output_dir_round, exist_ok=True)
         output_path = os.path.join(output_dir_round, f"{scan_name}_round{i}.ply")
         print(f"Saving merged PLY (before filtering): {output_path}")
-        if os.path.exists(output_path):
-            print(f"Skipping save_ply, file already exists: {output_path}")
-        else:
-            save_ply(output_path, final_all_points, final_all_labels)
+        save_ply(output_path, final_all_points, final_all_labels)
 
         output_dir_round = os.path.join(output_dir, f"round_{i}_noisy_score")
         os.makedirs(output_dir_round, exist_ok=True)
         file_path = os.path.join(output_dir_round, f"{scan_name}_noisysegments.ply")
         print(f"Computing instance score & saving noisysegments: {file_path}")
         instance_scores = process_and_save_ply(final_all_points, final_all_labels, file_path)
-        threshold = 200
-        print(f"Removing instances with score < {threshold}")
-        mask_low_score = (instance_scores < threshold)
-        final_all_labels[mask_low_score,1] = -1
-        output_dir_round = os.path.join(output_dir, f"round_{i}_after_remove_noise_{threshold}")
-        os.makedirs(output_dir_round, exist_ok=True)
-        output_path = os.path.join(output_dir_round, f"{scan_name}_round{i}.ply")
-        print(f"Saving filtered PLY: {output_path}")
-        save_ply(output_path, final_all_points, final_all_labels)
+
+        # Keep an immutable copy for "round_i" outputs.
+        # Filtering (if enabled) should only affect "after_remove_noise" outputs.
+        filtered_labels = final_all_labels.copy()
+        threshold = NOISE_SCORE_THRESHOLD
+        if threshold >= 0:
+            print(f"Removing instances with score < {threshold}")
+            mask_low_score = (instance_scores < threshold)
+            filtered_labels[mask_low_score, 1] = -1
+
+            output_dir_round = os.path.join(output_dir, f"round_{i}_after_remove_noise_{threshold:g}")
+            os.makedirs(output_dir_round, exist_ok=True)
+            output_path = os.path.join(output_dir_round, f"{scan_name}_round{i}.ply")
+            print(f"Saving filtered PLY: {output_path}")
+            save_ply(output_path, final_all_points, filtered_labels)
+        else:
+            print(f"Skip noise removal because MERGE_NOISE_THRESHOLD={threshold} < 0")
 
         output_dir_round = os.path.join(output_dir, f"round_{i}")
         output_path = os.path.join(output_dir_round, f"{scan_name}_round{i}.las")
-        final_all_points = final_all_points.astype(np.float64)
-        final_all_points[:, 0] += offsets[0]
-        final_all_points[:, 1] += offsets[1]
-        final_all_points[:, 2] += offsets[2]
+        final_all_points_las = final_all_points.astype(np.float64).copy()
+        final_all_points_las[:, 0] += offsets[0]
+        final_all_points_las[:, 1] += offsets[1]
+        final_all_points_las[:, 2] += offsets[2]
 
         las_offset = np.floor(offsets)
         print(f"Saving LAS file: {output_path}")
-        save_las(output_path, final_all_points, final_all_labels, las_offset)
+        save_las(output_path, final_all_points_las, final_all_labels, las_offset)
+
+        if threshold >= 0:
+            output_dir_round = os.path.join(output_dir, f"round_{i}_after_remove_noise_{threshold:g}")
+            output_path = os.path.join(output_dir_round, f"{scan_name}_round{i}.las")
+            print(f"Saving filtered LAS file: {output_path}")
+            save_las(output_path, final_all_points_las, filtered_labels, las_offset)
  
 if __name__ == '__main__':
     import sys
     scan_name = sys.argv[1]
     output_dir = sys.argv[2]
     iterations = int(sys.argv[3])
-    main(scan_name, output_dir, iterations)
+    offsets_dir = None
+    if len(sys.argv) > 4:
+        offsets_dir = sys.argv[4]
+    main(scan_name, output_dir, iterations, offsets_dir)

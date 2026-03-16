@@ -57,6 +57,38 @@ def parse_args():
         help='job launcher')
     parser.add_argument(
         '--tta', action='store_true', help='Test time augmentation')
+    qps_diag_group = parser.add_mutually_exclusive_group()
+    qps_diag_group.add_argument(
+        '--qps-diag',
+        dest='qps_diag',
+        action='store_true',
+        help='Enable ISA-FPS/QPS diagnostic export during inference. '
+        'Enabled by default.')
+    qps_diag_group.add_argument(
+        '--no-qps-diag',
+        dest='qps_diag',
+        action='store_false',
+        help='Disable ISA-FPS/QPS diagnostic export during inference.')
+    parser.add_argument(
+        '--qps-diag-dir',
+        help='Directory for QPS diagnostic JSON files. Defaults to '
+        '$FF3D_OUTPUT_PATH/qps_diag when FF3D_OUTPUT_PATH is set, otherwise '
+        '<work_dir>/qps_diag.')
+    parser.add_argument(
+        '--qps-diag-small-tree-ratio',
+        type=float,
+        help='Small-tree threshold ratio against scene max tree height. '
+        'Defaults to 1/3.')
+    parser.add_argument(
+        '--qps-diag-region-stride',
+        type=int,
+        default=1,
+        help='Record diagnostics every N regions. Defaults to 1.')
+    parser.add_argument(
+        '--qps-diag-no-stdout',
+        action='store_true',
+        help='Disable per-region diagnostic prints to stdout.')
+    parser.set_defaults(qps_diag=True)
     # When using PyTorch version >= 2.0.0, the `torch.distributed.launch`
     # will pass the `--local-rank` parameter to `tools/test.py` instead
     # of `--local_rank`.
@@ -118,6 +150,27 @@ def main():
         # use config filename as default work_dir if cfg.work_dir is None
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
+
+    output_root = os.environ.get('FF3D_OUTPUT_PATH')
+    diag_dir = args.qps_diag_dir
+    if diag_dir is None:
+        if output_root:
+            diag_dir = osp.join(output_root, 'qps_diag')
+        else:
+            diag_dir = osp.join(cfg.work_dir, 'qps_diag')
+
+    os.environ['FF3D_QPS_DIAG'] = '1' if args.qps_diag else '0'
+    os.environ['FF3D_QPS_DIAG_DIR'] = diag_dir
+    if args.qps_diag_small_tree_ratio is not None:
+        os.environ['FF3D_QPS_DIAG_SMALL_TREE_RATIO'] = str(
+            args.qps_diag_small_tree_ratio)
+    else:
+        os.environ.setdefault('FF3D_QPS_DIAG_SMALL_TREE_RATIO',
+                              str(1.0 / 3.0))
+    os.environ['FF3D_QPS_DIAG_REGION_STRIDE'] = str(
+        max(int(args.qps_diag_region_stride), 1))
+    if args.qps_diag_no_stdout:
+        os.environ['FF3D_QPS_DIAG_STDOUT'] = '0'
 
     cfg.load_from = args.checkpoint
 

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="700" viewBox="0 0 1100 700">
+  <style>
+    .box { fill: #f7fbff; stroke: #1f6feb; stroke-width: 2; rx: 8; }
+    .title { font: 700 14px Arial, sans-serif; fill: #073763 }
+    .meta { font: 12px Arial, sans-serif; fill: #1f2937 }
+    .small { font: 11px Arial, sans-serif; fill: #374151 }
+    .arrow { stroke: #334155; stroke-width: 2; fill: none; marker-end: url(#a) }
+  </style>
+
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Collate -->
+  <rect class="box" x="40" y="40" width="260" height="110" rx="8" />
+  <text class="title" x="62" y="66">Collate</text>
+  <text class="meta" x="62" y="88">输入: raw points list (每样本 N x feat)</text>
+  <text class="small" x="62" y="106">输出: coordinates, features, inverse_mapping, spatial_shape</text>
+  <text class="small" x="62" y="122">关键开关: `voxel_size`, `min_spatial_shape`</text>
+
+  <!-- Extract_feat -->
+  <rect class="box" x="420" y="40" width="300" height="110" rx="8" />
+  <text class="title" x="444" y="66">Extract_feat</text>
+  <text class="meta" x="444" y="88">输入: SparseConvTensor (features, coords)</text>
+  <text class="small" x="444" y="106">处理: input_conv -> backbone (SpConvUNet) -> output_layer</text>
+  <text class="small" x="444" y="122">输出: List[Tensor] per-sample features</text>
+
+  <!-- Heads -->
+  <rect class="box" x="40" y="200" width="360" height="140" rx="8" />
+  <text class="title" x="62" y="228">Heads</text>
+  <text class="meta" x="62" y="250">`Embed` -> embedding logits (for discrim. loss &amp; query selection)</text>
+  <text class="meta" x="62" y="268">`BiSemantic` -> binary semantic logits (bg/fg)</text>
+  <text class="small" x="62" y="286">关键开关: discriminative loss params, majority 阈值</text>
+
+  <!-- Decoder -->
+  <rect class="box" x="420" y="200" width="300" height="140" rx="8" />
+  <text class="title" x="444" y="228">Decoder</text>
+  <text class="meta" x="444" y="250">输入: backbone features + queries</text>
+  <text class="meta" x="444" y="268">输出: dict{masks, scores, sem_preds, cls_preds}</text>
+  <text class="small" x="444" y="286">关键开关: num_layers, d_model, num_heads, iter_pred, attn_mask</text>
+
+  <!-- Loss block -->
+  <rect class="box" x="780" y="40" width="300" height="120" rx="8" />
+  <text class="title" x="804" y="66">Loss (训练)</text>
+  <text class="meta" x="804" y="88">discriminative_loss + semantic_loss_bi</text>
+  <text class="small" x="804" y="106">若 epoch &gt; prepare_epoch: select queries -> decoder -> criterion (Hungarian/One2Many)</text>
+
+  <!-- Predict / Postprocess -->
+  <rect class="box" x="780" y="200" width="300" height="160" rx="8" />
+  <text class="title" x="804" y="228">Predict / Postprocess</text>
+  <text class="meta" x="804" y="250">路径A: region-slide (cylindrical regions)</text>
+  <text class="meta" x="804" y="268">路径B: full-frame</text>
+  <text class="small" x="804" y="286">操作: grid-sample / select queries -&gt; decoder -&gt; pred_by_feat_* -&gt; map to original points</text>
+  <text class="small" x="804" y="304">合并: merge_overlapping_instances_by_score, 去小实例, 重编号</text>
+
+  <!-- Arrows top row -->
+  <path class="arrow" d="M300 95 L420 95" />
+  <path class="arrow" d="M720 95 L780 95" />
+
+  <!-- Arrows from extract to heads & decoder -->
+  <path class="arrow" d="M360 155 L420 220" />
+  <path class="arrow" d="M500 150 L780 150" />
+
+  <!-- Arrows from heads to decoder and loss -->
+  <path class="arrow" d="M220 240 L420 240" />
+  <path class="arrow" d="M220 280 L780 150" />
+
+  <!-- Arrows from decoder to loss and predict -->
+  <path class="arrow" d="M720 270 L780 240" />
+  <path class="arrow" d="M720 240 L780 240" />
+
+  <!-- Legend / notes -->
+  <rect x="40" y="380" width="1040" height="260" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+  <text class="title" x="62" y="406">说明 &amp; 快速调参</text>
+  <text class="small" x="62" y="428">- 配置文件: `configs/oneformer3d_qs_radius16_qp300_2many.py`</text>
+  <text class="small" x="62" y="448">- Backbone 实例化: `self.unet = MODELS.build(backbone)`</text>
+  <text class="small" x="62" y="468">- Decoder 实例化: `self.decoder = MODELS.build(decoder)`</text>
+  <text class="small" x="62" y="488">- Data preprocessor: 由 BaseModel 在 model 构造时创建并在 train/val/test 步骤中调用</text>
+  <text class="small" x="62" y="508">- 重要阈值: `test_cfg.sp_score_thr`, `test_cfg.topk_insts`, `test_cfg.npoint_thr`, `prepare_epoch`</text>
+
+</svg>

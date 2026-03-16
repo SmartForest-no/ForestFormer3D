@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640">
+  <style>
+    .box{fill:#f8f9fb;stroke:#2b6cb0;stroke-width:2;rx:8;}
+    .title{font: 700 16px/1.2 'Arial',sans-serif;fill:#0b3b66}
+    .meta{font: 13px/1.2 'Arial',sans-serif;fill:#1a202c}
+    .small{font: 12px/1.1 'Arial',sans-serif;fill:#475569}
+    .arrow{stroke:#334155;stroke-width:2;fill:none;marker-end:url(#arrowhead)}
+  </style>
+
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Data preparation -->
+  <rect class="box" x="40" y="30" width="260" height="120" rx="8"/>
+  <text class="title" x="70" y="60">数据准备 (Data preparation)</text>
+  <text class="meta" x="70" y="86">输入：原始点云 (.ply/.bin)、标签</text>
+  <text class="small" x="70" y="106">输出：dataset files / meta</text>
+  <text class="small" x="70" y="124">开关：voxelize/采样（configs / data_preprocessor.py）</text>
+
+  <!-- Dataloader -->
+  <rect class="box" x="420" y="30" width="260" height="140" rx="8"/>
+  <text class="title" x="450" y="60">Dataloader</text>
+  <text class="meta" x="450" y="86">输入：dataset files + config</text>
+  <text class="meta" x="450" y="106">输出：batch dict {coords, feats, sem_labels, inst_masks}</text>
+  <text class="small" x="450" y="126">开关：augment / transforms_3d.py；sparse 格式</text>
+
+  <!-- Forward -->
+  <rect class="box" x="800" y="30" width="340" height="140" rx="8"/>
+  <text class="title" x="830" y="60">模型前向 (Forward)</text>
+  <text class="meta" x="830" y="86">输入：batch dict</text>
+  <text class="meta" x="830" y="106">输出：sem_logits, pred_masks, pred_scores, pred_classes</text>
+  <text class="small" x="830" y="126">开关：backbone (Minkowski / spconv)、oneformer3d_speedup_v1</text>
+
+  <!-- Arrows Top Row -->
+  <path class="arrow" d="M300 90 L420 90" />
+  <path class="arrow" d="M680 90 L800 90" />
+
+  <!-- Loss block (below forward) -->
+  <rect class="box" x="420" y="210" width="260" height="120" rx="8"/>
+  <text class="title" x="450" y="240">Loss（训练）</text>
+  <text class="meta" x="450" y="266">输入：model outputs + GT</text>
+  <text class="small" x="450" y="286">输出：scalar losses（总损失 + 分项）</text>
+  <text class="small" x="450" y="304">开关：matching(Hungarian)、loss weights、auxiliary</text>
+
+  <!-- Arrow from Forward to Loss -->
+  <path class="arrow" d="M940 140 L940 210" />
+  <path class="arrow" d="M940 210 L680 270" />
+
+  <!-- Post-process -->
+  <rect class="box" x="40" y="360" width="260" height="120" rx="8"/>
+  <text class="title" x="70" y="390">Post-process（推理）</text>
+  <text class="meta" x="70" y="416">输入：pred_masks, scores, classes</text>
+  <text class="small" x="70" y="436">输出：去重后的实例列表 + 语义图</text>
+  <text class="small" x="70" y="454">开关：NMS 类型/阈值（mask_matrix_nms.py）</text>
+
+  <!-- Eval -->
+  <rect class="box" x="420" y="360" width="260" height="120" rx="8"/>
+  <text class="title" x="450" y="390">评估 (Eval)</text>
+  <text class="meta" x="450" y="416">输入：final outputs + GT</text>
+  <text class="small" x="450" y="436">输出：PQ, mAP, mIoU 等</text>
+  <text class="small" x="450" y="454">开关：IoU 阈值、类别过滤（evaluate_semantic_instance.py）</text>
+
+  <!-- Visualize -->
+  <rect class="box" x="800" y="360" width="340" height="120" rx="8"/>
+  <text class="title" x="830" y="390">可视化 (Visualize)</text>
+  <text class="meta" x="830" y="416">输入：final outputs + pointcloud</text>
+  <text class="small" x="830" y="436">输出：PLY/PNG/demo 文件</text>
+  <text class="small" x="830" y="454">开关：颜色映射、置信度过滤（tools/plyutils.py）</text>
+
+  <!-- Arrows Bottom Row -->
+  <path class="arrow" d="M300 420 L420 420" />
+  <path class="arrow" d="M680 420 L800 420" />
+
+  <!-- Connections: Dataloader -> Forward (down-left) and Loss -> Postprocess/Eval/Vis -->
+  <path class="arrow" d="M560 170 L560 210" />
+  <path class="arrow" d="M680 270 L560 360" />
+  <path class="arrow" d="M680 270 L940 360" />
+
+  <!-- Footnote -->
+  <text class="small" x="40" y="600">注：关键实现文件见 ForestFormer3D/oneformer3d/*.py、tools/*.py 与 configs/*.py</text>
+
+</svg>
