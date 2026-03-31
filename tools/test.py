@@ -2,6 +2,8 @@
 import argparse
 import os
 import os.path as osp
+import torch
+
 
 from mmengine.config import Config, ConfigDict, DictAction
 from mmengine.registry import RUNNERS
@@ -75,7 +77,7 @@ def trigger_visualization_hook(cfg, args):
         visualization_hook['draw'] = True
         if args.show:
             visualization_hook['show'] = True
-            visualization_hook['wait_time'] = args.wait_timeP
+            visualization_hook['wait_time'] = args.wait_time
         if args.show_dir:
             visualization_hook['test_out_dir'] = args.show_dir
         all_task_choices = [
@@ -122,24 +124,31 @@ def main():
     print('Applying spconv checkpoint fix in-memory...')
     checkpoint = torch.load(args.checkpoint, map_location='cpu')
 
-    key_to_fix = 'state_dict'
-    if key_to_fix not in checkpoint:
-        raise KeyError(f"Could not find a state dictionary ('state_dict') in the checkpoint: {args.checkpoint}")
+    if args.checkpoint.endswith('fix.pth') or args.checkpoint.endswith('fixed.pth'):
+        print(f"Checkpoint filename ends with 'fix.pth' or 'fixed.pth', skipping spconv checkpoint fix.")
+        cfg.load_from = args.checkpoint
+    else:
+        print('Applying spconv checkpoint fix in-memory...')
+        checkpoint = torch.load(args.checkpoint, map_location='cpu')
 
-    checkpoint_to_fix = checkpoint[key_to_fix]
+        key_to_fix = 'state_dict'
+        if key_to_fix not in checkpoint:
+            raise KeyError(f"Could not find a state dictionary ('state_dict') in the checkpoint: {args.checkpoint}")
 
-    for layer in list(checkpoint_to_fix.keys()):
-        if (layer.startswith('unet') or layer.startswith('input_conv')) \
-            and layer.endswith('weight') \
-            and len(checkpoint_to_fix[layer].shape) == 5:
-            checkpoint_to_fix[layer] = checkpoint_to_fix[layer].permute(1, 2, 3, 4, 0)
+        checkpoint_to_fix = checkpoint[key_to_fix]
+
+        for layer in list(checkpoint_to_fix.keys()):
+            if (layer.startswith('unet') or layer.startswith('input_conv')) \
+                and layer.endswith('weight') \
+                and len(checkpoint_to_fix[layer].shape) == 5:
+                checkpoint_to_fix[layer] = checkpoint_to_fix[layer].permute(1, 2, 3, 4, 0)
+
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pth') as tmp_checkpoint_file:
+            torch.save(checkpoint, tmp_checkpoint_file.name)
+            cfg.load_from = tmp_checkpoint_file.name
+        print(f'Spconv checkpoint fix applied. Using temporary checkpoint: {cfg.load_from}')
     
-    import tempfile
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pth') as tmp_checkpoint_file:
-        torch.save(checkpoint, tmp_checkpoint_file.name)
-        cfg.load_from = tmp_checkpoint_file.name
-    print(f'Spconv checkpoint fix applied. Using temporary checkpoint: {cfg.load_from}')
-
     # "Modify the output_path in the function 'predict'"
     # Fix is toinject the work_dir into the model's test_cfg to avoid hardcoded paths for saving predictions.
     if cfg.model.get('test_cfg') is None:
