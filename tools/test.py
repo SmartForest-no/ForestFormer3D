@@ -1,4 +1,5 @@
 # This is an exact copy of tools/test.py from open-mmlab/mmdetection3d.
+import torch # FIX: import missing
 import argparse
 import os
 import os.path as osp
