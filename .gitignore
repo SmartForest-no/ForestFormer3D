@@ -1,3 +1,9 @@
 # Ignore Python bytecode
 *.pyc
 __pycache__/
+
+# model weights
+*.pth
+
+# point cloud data
+*.ply
