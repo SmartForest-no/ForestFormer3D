@@ -1,6 +1,6 @@
 # ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds
 
-This is the official implementation of the paper:
+This is an unofficial fork with a better docker setup of the implementation of the paper:
 
 **"ForestFormer3D: A Unified Framework for End-to-End Segmentation of Forest LiDAR 3D Point Clouds"**
 
@@ -11,10 +11,11 @@ This is the official implementation of the paper:
 - 📦 [Dataset & pre-trained model on zenodo](https://zenodo.org/records/16742708)
 
 ---
+📢 This is NOT my project, the original repository is [here](https://github.com/SmartForest-no/ForestFormer3D)
 
 ## 📚 Citation
 
-If you find this project helpful, please cite our paper:
+If you find their project helpful, please cite their paper:
 
 ```bibtex
 @inproceedings{xiang2025forestformer3d,
@@ -62,9 +63,7 @@ sudo docker build -t forestformer3d-image .
 
 # Run the Docker container with GPU support, shared memory allocation, and port mapping
 sudo docker run --gpus all --shm-size=128g -d -p 127.0.0.1:49211:22 \
-  -v #locationofproject#:/workspace \
-  -v segmentator:segmentator \
-  --name forestformer3d-container forestformer3d-image
+  -v ./:/workspace --name forestformer3d-container forestformer3d-image
 
 # Enter the running container
 sudo docker exec -it forestformer3d-container /bin/bash

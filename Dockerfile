@@ -117,20 +117,10 @@ RUN pip install --no-deps \
     google-auth-oauthlib \
     google-auth \
     requests-oauthlib \
-    oauthlib
+    oauthlib \
+    laspy==2.6.0 
 
-RUN apt-get update && apt-get install -y nvidia-utils-530
+RUN apt-get update && apt-get install -y nvidia-utils-530 && apt-get install -y wget unzip
 
 # 设置 PYTHONPATH 环境变量
 ENV PYTHONPATH=/workspace
-
-# 保持容器运行
-CMD ["bash", "-c", "while true; do sleep 1000; done"]
-
-RUN pip install --no-deps --no-cache-dir\
-    torch-points-kernels==0.7.0
-
-RUN pip uninstall torch-cluster
-
-RUN pip install --no-deps --no-cache-dir\
-    torch-cluster
