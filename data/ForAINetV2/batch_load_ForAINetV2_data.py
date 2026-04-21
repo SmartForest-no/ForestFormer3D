@@ -131,8 +131,8 @@ def batch_export(max_num_point,
         try:
             export_one_scan(scan_name, output_filename_prefix, max_num_point,
                             forainetv2_dir, export_func, test_mode)
-        except Exception:
-            print(f'Failed export scan: {scan_name}')
+        except Exception as e:
+            print(f'Failed export scan: {scan_name}, error: {e}')
         print('-' * 20 + 'done')
 
 
