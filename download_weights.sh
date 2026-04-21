@@ -11,4 +11,8 @@ wget "https://zenodo.org/records/16742708/files/clean_forestformer.zip?download=
 unzip clean_forestformer.zip -d work_dirs
 rm clean_forestformer.zip
 
+python tools/fix_spconv_checkpoint.py \
+  --in-path work_dirs/clean_forestformer/epoch_3000_fix.pth \
+  --out-path work_dirs/clean_forestformer/epoch_3000_fix_fixed.pth
+
 echo "Weights downloaded and extracted to work_dirs/clean_forestformer"
