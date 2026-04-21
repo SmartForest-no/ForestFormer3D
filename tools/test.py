@@ -9,6 +9,7 @@ from mmengine.runner import Runner
 
 from mmdet3d.utils import replace_ceph_backend
 
+import torch
 
 # TODO: support fuse_conv_bn and format_only
 def parse_args():
