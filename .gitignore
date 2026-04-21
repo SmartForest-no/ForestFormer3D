@@ -7,3 +7,7 @@ __pycache__/
 
 # point cloud data
 *.ply
+
+# generated files
+*.pkl
+*.bin
