@@ -119,6 +119,18 @@ RUN pip install --no-deps \
     requests-oauthlib \
     oauthlib
 
+RUN git clone https://github.com/Karbo123/segmentator.git /workspace/segmentator \
+    && cd /workspace/segmentator/csrc \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+        -DCMAKE_PREFIX_PATH=$(python3 -c 'import torch;print(torch.utils.cmake_prefix_path)') \
+        -DPYTHON_INCLUDE_DIR=$(python3 -c "from distutils.sysconfig import get_python_inc; print(get_python_inc())") \
+        -DPYTHON_LIBRARY=$(python3 -c "import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR') + '/libpython3.10.so')") \
+        -DCMAKE_INSTALL_PREFIX=$(python3 -c 'from distutils.sysconfig import get_python_lib; print(get_python_lib())') \
+    && make \
+    && make install
+
 RUN apt-get update && apt-get install -y nvidia-utils-530
 
 # 设置 PYTHONPATH 环境变量
