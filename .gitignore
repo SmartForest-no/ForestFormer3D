@@ -11,3 +11,4 @@ __pycache__/
 # generated files
 *.pkl
 *.bin
+work_dirs/oneformer3d_*
